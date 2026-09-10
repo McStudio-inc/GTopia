@@ -40,7 +40,7 @@ Before cloning and building, ensure you have the following environment dependenc
 ### 🐧 Linux (Ubuntu/Debian)
 ```bash
 sudo apt update
-sudo apt install -y build-essential cmake python3 mysql-client libmysqlclient-dev go
+sudo apt install -y build-essential cmake python3 libmysqlclient-dev go
 ```
 
 ### 🪟 Windows

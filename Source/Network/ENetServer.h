@@ -2,10 +2,11 @@
 
 #include "../Precompiled.h"
 
-#include <enet/enet.h>
 #include <concurrentqueue.h>
+#include <enet/enet.h>
 
-class ENetServer {
+class ENetServer
+{
 public:
     typedef moodycamel::ConcurrentQueue<ENetEvent> EventQueue;
 

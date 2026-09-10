@@ -33,9 +33,6 @@ protected:
     bool Connect(const string& host, uint16 port, uint8 retryCount, NetClient** pClient,
                  const volatile sig_atomic_t* shutdownFlag = nullptr);
 
-public:
-    bool SendPacketRaw(NetClient* pClient, VariantVector& data);
-
 protected:
     NetSocket* m_pNetSocket;
     moodycamel::ConcurrentQueue<TCPPacketEvent> m_packetQueue;

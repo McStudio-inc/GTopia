@@ -211,7 +211,7 @@ bool StoreManager::PurchaseItem(GamePlayer* pPlayer, const string& entryCode)
     if (pStoreEntry->cost < 0)
     {
         uint8 tokenCount = pPlayer->GetInventory().GetCountOfItem(ITEM_ID_GROWTOKEN);
-        if (pStoreEntry->cost > tokenCount)
+        if ((-pStoreEntry->cost) > tokenCount)
         {
             pPlayer->SendOnStorePurchaseResult("You can't afford " + pStoreEntry->name + "! You're `$" +
                                                ToString(pStoreEntry->cost - tokenCount) + "`` Growtokens short.");

@@ -47,7 +47,7 @@ VariantVector OnSendToServer(uint16 port, uint32 token, uint32 userID, const str
 {
     VariantVector data(6);
     data[0] = "OnSendToServer";
-    data[1] = (uint32)port;
+    data[1] = (int32)port;
     data[2] = token;
     data[3] = userID;
     data[4] = serverIP + "|" + doorID + "|";

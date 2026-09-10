@@ -1,19 +1,13 @@
 #include "WorldNPC.h"
-#include "WorldNPCManager.h"
+#include "../Player/PlayerManager.h"
 #include "Math/Math.h"
 #include "Math/Random.h"
 #include "World.h"
-#include "../Player/PlayerManager.h"
+#include "WorldNPCManager.h"
 
-WorldNPC::WorldNPC()
-: id(0), type(0), speed(0), val1(0), val2(0), lassoed(false), hp(0),
-isInsidePowerNodes(false)
-{
-}
+WorldNPC::WorldNPC() : id(0), type(0), speed(0), val1(0), val2(0), lassoed(false), hp(0), isInsidePowerNodes(false) {}
 
-WorldNPC::~WorldNPC()
-{
-}
+WorldNPC::~WorldNPC() {}
 
 void WorldNPC::Init(eNPCType npcType, uint8 npcID, const Vector2Float& npcPos)
 {
@@ -28,23 +22,23 @@ void WorldNPC::Init(eNPCType npcType, uint8 npcID, const Vector2Float& npcPos)
 
 void WorldNPC::Update(WorldNPCManager* pNPCMgr, uint64 deltaMS)
 {
-    if(!pNPCMgr)
+    if (!pNPCMgr)
         return;
 
     World* pWorld = pNPCMgr->GetWorld();
-    if(!pWorld)
+    if (!pWorld)
         return;
 
     float deltaSec = deltaMS / 1000.0f;
 
-    switch(type)
+    switch (type)
     {
         case NPC_TYPE_GHOST_JAR:
         {
             speed += deltaSec;
-            if(val1 == 0) // waiting for jar to open
+            if (val1 == 0) // waiting for jar to open
             {
-                if(speed >= 2.0f)
+                if (speed >= 2.0f)
                 {
                     speed -= 2.0f;
                     val1 = 1;
@@ -52,7 +46,7 @@ void WorldNPC::Update(WorldNPCManager* pNPCMgr, uint64 deltaMS)
             }
             else
             {
-                if(speed >= 5.0f)
+                if (speed >= 5.0f)
                 {
                     pNPCMgr->RemoveNpc(id);
                     return;
@@ -68,24 +62,24 @@ void WorldNPC::Update(WorldNPCManager* pNPCMgr, uint64 deltaMS)
         {
             CheckGhostCanSlime(pNPCMgr);
 
-            if(hp < 1)
+            if (hp < 1)
             {
                 pWorld->GetBossManager()->EndBoss(id);
                 return;
             }
 
-            if(nextAttackTimer.IsPassed())
+            if (nextAttackTimer.IsPassed())
             {
                 val2 = (isInsidePowerNodes) ? 1000 : 0;
                 nextAttackTimer.Set(500);
             }
 
-            if(val1 == 0)
+            if (val1 == 0)
             {
                 float moveAngle = Atan2(dest.y - pos.y, dest.x - pos.x);
                 float distToDest = DistanceBetweenPoints(pos, dest);
 
-                if(pos == dest || (distToDest <= speed * deltaSec)) // arrived
+                if (pos == dest || (distToDest <= speed * deltaSec)) // arrived
                 {
                     pos = dest;
                     val1 = 1;
@@ -94,7 +88,7 @@ void WorldNPC::Update(WorldNPCManager* pNPCMgr, uint64 deltaMS)
 
                     speed = RandomRangeFloat(20.0f, 50.0f);
 
-                    if(!isInsidePowerNodes)
+                    if (!isInsidePowerNodes)
                     {
                         MoveGhostRandom(pNPCMgr);
                     }
@@ -103,7 +97,7 @@ void WorldNPC::Update(WorldNPCManager* pNPCMgr, uint64 deltaMS)
                         val2 = 1000;
 
                         TileInfo* pClosestNode = pWorld->GetTileManager()->GetClosestPowerNodeFromWorldPos(pos);
-                        if(pClosestNode)
+                        if (pClosestNode)
                         {
                             dest = pClosestNode->GetWorldPosCenter();
                         }
@@ -120,9 +114,10 @@ void WorldNPC::Update(WorldNPCManager* pNPCMgr, uint64 deltaMS)
                     pos.x += Cos(moveAngle) * speed * deltaSec;
                     pos.y += Sin(moveAngle) * speed * deltaSec;
 
-                    if((val2 == 500 && nextAttackTimer.GetRemainingTime() > 99) || !pNPCMgr->IsGhostOnBeam(this) || beams.empty())
+                    if ((val2 == 500 && nextAttackTimer.GetRemainingTime() > 99) || !pNPCMgr->IsGhostOnBeam(this) ||
+                        beams.empty())
                     {
-                        if(isInsidePowerNodes && (val2 != 1000 || nextAttackTimer.GetRemainingTime() < 100))
+                        if (isInsidePowerNodes && (val2 != 1000 || nextAttackTimer.GetRemainingTime() < 100))
                         {
                             val2 = 1000;
                             nextAttackTimer.Set(500);
@@ -139,28 +134,28 @@ void WorldNPC::Update(WorldNPCManager* pNPCMgr, uint64 deltaMS)
 
                         uint32 beamCount = beams.size();
 
-                        for(auto& beamPos : beams)
+                        for (auto& beamPos : beams)
                             avgPos += beamPos;
 
                         avgPos /= beamCount;
                         beams.clear();
 
                         float scatterAngle = Atan2(avgPos.y - pos.y, avgPos.x - pos.x);
-    
+
                         float scatterX = Cos(scatterAngle) * 64.0f + pos.x;
                         dest.x = scatterX + RandomRangeFloat(-32.0f, 32.0f);
-                        
+
                         float scatterY = Sin(scatterAngle) * 64.0f + pos.y;
                         dest.y = scatterY + RandomRangeFloat(-32.0f, 32.0f);
-    
+
                         Vector2Int& vWorldSize = pWorld->GetTileManager()->GetSize();
-    
+
                         float maxMapX = (vWorldSize.x - 1) * 32.0f;
                         float maxMapY = (vWorldSize.y - 1) * 32.0f;
-    
+
                         dest.x = Clamp(dest.x, 0.0f, maxMapX);
                         dest.y = Clamp(dest.y, 0.0f, maxMapY);
-    
+
                         speed = beamCount * 25.0f;
                         pWorld->SendNPCPacketToAll(NPC_EVENT_MOVE, id, type, pos, dest, speed, val1, val2);
                     }
@@ -168,20 +163,20 @@ void WorldNPC::Update(WorldNPCManager* pNPCMgr, uint64 deltaMS)
             }
             else
             {
-                if(!isInsidePowerNodes)
+                if (!isInsidePowerNodes)
                 {
-
                 }
-                else if(val2 == 1000 && nextAttackTimer.GetRemainingTime() > 99)
+                else if (val2 == 1000 && nextAttackTimer.GetRemainingTime() > 99)
                 {
                     TileInfo* pClosestNode = pWorld->GetTileManager()->GetClosestPowerNodeFromWorldPos(pos);
-                    if(pClosestNode && DistanceBetweenPoints(pClosestNode->GetWorldPos(), pos) < 32 * 5)
+                    if (pClosestNode && DistanceBetweenPoints(pClosestNode->GetWorldPos(), pos) < 32 * 5)
                     {
                         val2 = 800;
                         nextAttackTimer.Set(800);
 
                         pWorld->DestroyTileAndSendToAll(pClosestNode);
-                        pWorld->SendParticleEffectToAll(PARTICLE_EFFECT_SHRAPNEL_BOOM, pClosestNode->GetWorldPosCenter());
+                        pWorld->SendParticleEffectToAll(PARTICLE_EFFECT_SHRAPNEL_BOOM,
+                                                        pClosestNode->GetWorldPosCenter());
                         isInsidePowerNodes = false;
                     }
                 }
@@ -194,7 +189,7 @@ void WorldNPC::Update(WorldNPCManager* pNPCMgr, uint64 deltaMS)
 
                 val1 = 0;
             }
-            
+
             break;
         }
 
@@ -202,16 +197,16 @@ void WorldNPC::Update(WorldNPCManager* pNPCMgr, uint64 deltaMS)
         case NPC_TYPE_GHOST:
         {
             CheckGhostCanSlime(pNPCMgr);
-            
-            if(val1 == 0 && val2 > 0)
+
+            if (val1 == 0 && val2 > 0)
             {
                 val2 -= deltaMS;
             }
 
-            if(val1 == 1)
+            if (val1 == 1)
             {
                 WorldNPC* pTrap = pNPCMgr->GetNPCByID(val2);
-                if(!pTrap || (pTrap && !pTrap->IsGhostTrap()))
+                if (!pTrap || (pTrap && !pTrap->IsGhostTrap()))
                 {
                     val1 = 0;
                     val2 = 0;
@@ -220,35 +215,35 @@ void WorldNPC::Update(WorldNPCManager* pNPCMgr, uint64 deltaMS)
 
             bool shouldProcessMovement = true;
 
-            if(val1 == 1)
+            if (val1 == 1)
             {
                 WorldNPC* pTrap = pNPCMgr->GetNPCByID(val2);
                 bool validTrap = false;
-            
-                if(pTrap && pTrap->IsGhostTrap())
+
+                if (pTrap && pTrap->IsGhostTrap())
                 {
-                    if(pTrap->val1 == 1)
+                    if (pTrap->val1 == 1)
                     {
-                        if(DistanceBetweenPoints(pTrap->pos, dest) <= 2.0f)
+                        if (DistanceBetweenPoints(pTrap->pos, dest) <= 2.0f)
                         {
                             validTrap = true;
                         }
                     }
                 }
-            
-                if(!validTrap)
+
+                if (!validTrap)
                 {
                     val1 = 0;
                     val2 = 0;
-            
+
                     MoveGhostRandom(pNPCMgr);
                     speed = RandomRangeFloat(20.0f, 50.0f);
-            
-                    if(type == NPC_TYPE_BOSS_GHOST)
+
+                    if (type == NPC_TYPE_BOSS_GHOST)
                     {
                         speed *= 2.5f;
                     }
-            
+
                     pWorld->SendNPCPacketToAll(NPC_EVENT_MOVE, id, type, pos, dest, speed, val1, val2);
                 }
             }
@@ -256,27 +251,29 @@ void WorldNPC::Update(WorldNPCManager* pNPCMgr, uint64 deltaMS)
             float moveAngle = Atan2(dest.y - pos.y, dest.x - pos.x);
             float distToDest = DistanceBetweenPoints(pos, dest);
 
-            if(shouldProcessMovement && (val1 == 0 || val1 == 1))
+            if (shouldProcessMovement && (val1 == 0 || val1 == 1))
             {
-                if(pos == dest || (distToDest <= speed * deltaSec)) // arrived
+                if (pos == dest || (distToDest <= speed * deltaSec)) // arrived
                 {
                     pos = dest;
-    
-                    if(val1 == 1) // trapped
+
+                    if (val1 == 1) // trapped
                     {
                         pWorld->SendNPCPacketToAll(NPC_EVENT_SUCKED, id, val2, pos, dest, speed, val1, val2);
-    
+
                         WorldNPC* pTrap = pNPCMgr->GetNPCByID(val2);
-                        if(pTrap)
+                        if (pTrap)
                         {
                             GamePlayer* pPlayer = GetPlayerManager()->GetPlayerByNetID(pTrap->val2);
-                            if(pPlayer)
+                            if (pPlayer)
                             {
                                 int32 rewardItemID = ITEM_ID_GHOST_IN_A_JAR;
-                                if(type == NPC_TYPE_HARVEST_GHOST) rewardItemID = ITEM_ID_ANCESTOR_MOONCAKE;
-                                else if(type == NPC_TYPE_MIND_CONTROL_GHOST) rewardItemID = ITEM_ID_MIND_GHOST_IN_A_JAR;
-        
-                                if(type == NPC_TYPE_HARVEST_GHOST)
+                                if (type == NPC_TYPE_HARVEST_GHOST)
+                                    rewardItemID = ITEM_ID_ANCESTOR_MOONCAKE;
+                                else if (type == NPC_TYPE_MIND_CONTROL_GHOST)
+                                    rewardItemID = ITEM_ID_MIND_GHOST_IN_A_JAR;
+
+                                if (type == NPC_TYPE_HARVEST_GHOST)
                                 {
                                     pPlayer->SendOnTalkBubble("`9The ghost became an Acestor Mooncake!``", false);
                                 }
@@ -284,17 +281,19 @@ void WorldNPC::Update(WorldNPCManager* pNPCMgr, uint64 deltaMS)
                                 {
                                     pPlayer->SendOnTalkBubble("`3I caught a ghost!``", false);
                                 }
-    
-                                if(pPlayer->GetInventory().GetClothByPart(BODY_PART_CHESTITEM) == ITEM_ID_GHOST_DRAGON_CHARM)
+
+                                if (pPlayer->GetInventory().GetClothByPart(BODY_PART_CHESTITEM) ==
+                                    ITEM_ID_GHOST_DRAGON_CHARM)
                                 {
                                     pPlayer->GiveXP(200);
                                 }
-    
+
                                 uint8 fitCount = pPlayer->GetInventory().GetFitItemCount(rewardItemID);
-                                if(fitCount == 0)
+                                if (fitCount == 0)
                                 {
-                                    TileInfo* pTile = pWorld->GetTileManager()->GetTileByWorldPos(pPlayer->GetWorldPos());
-                                    if(pTile)
+                                    TileInfo* pTile =
+                                        pWorld->GetTileManager()->GetTileByWorldPos(pPlayer->GetWorldPos());
+                                    if (pTile)
                                     {
                                         pWorld->DropObjectOnTile(pTile, rewardItemID, 1, Vector2Float(0, 0), true);
                                     }
@@ -303,20 +302,20 @@ void WorldNPC::Update(WorldNPCManager* pNPCMgr, uint64 deltaMS)
                                 {
                                     pPlayer->ModifyInventoryItem(rewardItemID, 1);
                                 }
-    
+
                                 pWorld->ThrowItemToPlayerFromPosition(pPlayer, pTrap->pos, rewardItemID, 1);
                             }
-    
+
                             pNPCMgr->RemoveNpc(pTrap->id);
                         }
-    
+
                         pNPCMgr->RemoveNpc(id);
                     }
                     else
                     {
                         speed = RandomRangeFloat(20.0f, 50.0f);
                         MoveGhostRandom(pNPCMgr);
-    
+
                         pWorld->SendNPCPacketToAll(NPC_EVENT_MOVE, id, type, pos, dest, speed, val1, val2);
                     }
                 }
@@ -324,29 +323,29 @@ void WorldNPC::Update(WorldNPCManager* pNPCMgr, uint64 deltaMS)
                 {
                     pos.x += Cos(moveAngle) * speed * deltaSec;
                     pos.y += Sin(moveAngle) * speed * deltaSec;
-    
-                    if(val2 < 1 && pNPCMgr->IsGhostOnBeam(this))
+
+                    if (val2 < 1 && pNPCMgr->IsGhostOnBeam(this))
                     {
                         val2 = 500;
                         val1 = 0;
-                        
+
                         Vector2Float& vLastLassoe = pNPCMgr->GetLastLassoePos();
                         float scatterAngle = Atan2(vLastLassoe.y - pos.y, vLastLassoe.x - pos.x);
-    
+
                         float scatterX = Cos(scatterAngle) * 64.0f + pos.x;
                         dest.x = scatterX + RandomRangeFloat(-32.0f, 32.0f);
-                        
+
                         float scatterY = Sin(scatterAngle) * 64.0f + pos.y;
                         dest.y = scatterY + RandomRangeFloat(-32.0f, 32.0f);
-    
+
                         Vector2Int& vWorldSize = pWorld->GetTileManager()->GetSize();
-    
+
                         float maxMapX = (vWorldSize.x - 1) * 32.0f;
                         float maxMapY = (vWorldSize.y - 1) * 32.0f;
-    
+
                         dest.x = Clamp(dest.x, 0.0f, maxMapX);
                         dest.y = Clamp(dest.y, 0.0f, maxMapY);
-    
+
                         speed = 30.0f;
                         pWorld->SendNPCPacketToAll(NPC_EVENT_MOVE, id, type, pos, dest, speed, val1, val2);
                     }
@@ -360,31 +359,31 @@ void WorldNPC::Update(WorldNPCManager* pNPCMgr, uint64 deltaMS)
 
 void WorldNPC::MoveGhostRandom(WorldNPCManager* pNPCMgr)
 {
-    if(!pNPCMgr)
+    if (!pNPCMgr)
         return;
 
     World* pWorld = pNPCMgr->GetWorld();
-    if(!pWorld)
-        return; 
+    if (!pWorld)
+        return;
 
     dest.x = pos.x + RandomRangeFloat(-128.0f, 128.0f);
     dest.y = pos.y + RandomRangeFloat(-128.0f, 128.0f);
 
-    if(type != NPC_TYPE_BOSS_GHOST)
+    if (type != NPC_TYPE_BOSS_GHOST)
     {
-        for(uint32 i = 0; i < pNPCMgr->GetNPCActiveOrNotCount(); ++i)
+        for (uint32 i = 0; i < pNPCMgr->GetNPCActiveOrNotCount(); ++i)
         {
             WorldNPC* pTrap = pNPCMgr->GetNPCByID(i);
-            if(!pTrap)
+            if (!pTrap)
                 continue;
 
-            if(!pTrap->IsGhostTrap())
+            if (!pTrap->IsGhostTrap())
                 continue;
-            
-            if(DistanceBetweenPoints(dest, pTrap->pos) < 128.0f)
+
+            if (DistanceBetweenPoints(dest, pTrap->pos) < 128.0f)
             {
                 float escapeAngle = Atan2(pos.y - pTrap->pos.y, pos.x - pTrap->pos.x);
-                
+
                 dest.x = (Cos(escapeAngle) * 64.0f + pos.x) + RandomRangeFloat(-32.0f, 32.0f);
                 dest.y = (Sin(escapeAngle) * 64.0f + pos.y) + RandomRangeFloat(-32.0f, 32.0f);
                 speed = 50.0f;
@@ -393,60 +392,64 @@ void WorldNPC::MoveGhostRandom(WorldNPCManager* pNPCMgr)
         }
     }
 
-    if(dest.x < 32.0f) dest.x = 32.0f;
-    if(dest.y < 32.0f) dest.y = 32.0f;
+    if (dest.x < 32.0f)
+        dest.x = 32.0f;
+    if (dest.y < 32.0f)
+        dest.y = 32.0f;
 
     Vector2Int& vWorldSize = pWorld->GetTileManager()->GetSize();
     float maxMapX = (vWorldSize.x - 1) * 32.0f;
     float maxMapY = (vWorldSize.y - 1) * 32.0f;
 
-    if(type == NPC_TYPE_BOSS_GHOST)
+    if (type == NPC_TYPE_BOSS_GHOST)
     {
         maxMapX = (vWorldSize.x - 6) * 32.0f;
         maxMapY = (vWorldSize.y - 6) * 32.0f;
     }
 
-    if(maxMapX < dest.x) dest.x = maxMapX;
-    if(maxMapY < dest.y) dest.y = maxMapY;
+    if (maxMapX < dest.x)
+        dest.x = maxMapX;
+    if (maxMapY < dest.y)
+        dest.y = maxMapY;
 }
 
 void WorldNPC::CheckGhostCanSlime(WorldNPCManager* pNPCMgr)
 {
-    if(!pNPCMgr)
+    if (!pNPCMgr)
         return;
 
     World* pWorld = pNPCMgr->GetWorld();
-    if(!pWorld)
+    if (!pWorld)
         return;
 
     float halfSize = (type == NPC_TYPE_BOSS_GHOST) ? 64.0f : 16.0f;
     RectFloat ghostRect(pos.x - halfSize, pos.y - halfSize, pos.x + halfSize, pos.y + halfSize);
 
     auto playersInRect = pWorld->GetPlayersInWorldRect(ghostRect);
-    if(playersInRect.empty())
+    if (playersInRect.empty())
         return;
 
     bool hitAnyPlayer = false;
 
-    for(auto& pPlayer : playersInRect)
+    for (auto& pPlayer : playersInRect)
     {
-        if(!pPlayer)
+        if (!pPlayer)
             continue;
 
         TileInfo* pTile = pWorld->GetTileManager()->GetTileByWorldPos(pPlayer->GetWorldPosCenter());
-        if(pTile)
+        if (pTile)
         {
-            if(IsMainDoor(pTile->GetFG()))
+            if (IsMainDoor(pTile->GetFG()))
                 continue;
         }
 
         int32 hatItemID = pPlayer->GetInventory().GetClothByPart(BODY_PART_HAT);
 
-        if(type == NPC_TYPE_GHOST_SHARK)
+        if (type == NPC_TYPE_GHOST_SHARK)
         {
-            if(hatItemID != ITEM_ID_GHOSTKINGS_GLORY)
+            if (hatItemID != ITEM_ID_GHOSTKINGS_GLORY)
             {
-                if(RandomRangeInt(0, 5) < 3)
+                if (RandomRangeInt(0, 5) < 3)
                 {
                     pWorld->SendTalkBubbleAndConsoleToAll("`2CHOMP CHOMP``", false, pPlayer);
                 }
@@ -456,26 +459,27 @@ void WorldNPC::CheckGhostCanSlime(WorldNPCManager* pNPCMgr)
                 break;
             }
         }
-        else if(type == NPC_TYPE_MIND_CONTROL_GHOST)
+        else if (type == NPC_TYPE_MIND_CONTROL_GHOST)
         {
-            if(!pPlayer->GetModController().HasPlayMod(PLAYMOD_TYPE_MIND_CONTROL))
+            if (!pPlayer->GetModController().HasPlayMod(PLAYMOD_TYPE_MIND_CONTROL))
             {
                 hitAnyPlayer = true;
             }
 
-            if(hatItemID != ITEM_ID_FOIL_HAT && hatItemID != ITEM_ID_ALIEN_MIND_PROTECTOR && hatItemID != ITEM_ID_GHOSTKINGS_GLORY)
+            if (hatItemID != ITEM_ID_FOIL_HAT && hatItemID != ITEM_ID_ALIEN_MIND_PROTECTOR &&
+                hatItemID != ITEM_ID_GHOSTKINGS_GLORY)
             {
                 pPlayer->GetModController().AddPlayMod(PLAYMOD_TYPE_MIND_CONTROL);
             }
 
-            if(hatItemID == ITEM_ID_ALIEN_MIND_PROTECTOR)
+            if (hatItemID == ITEM_ID_ALIEN_MIND_PROTECTOR)
             {
                 pPlayer->PlaySFX("ghost_shield_reflect.wav");
             }
         }
-        else if(hatItemID != ITEM_ID_GHOSTKINGS_GLORY)
+        else if (hatItemID != ITEM_ID_GHOSTKINGS_GLORY)
         {
-            if(!pPlayer->GetModController().HasPlayMod(PLAYMOD_TYPE_SLIMED))
+            if (!pPlayer->GetModController().HasPlayMod(PLAYMOD_TYPE_SLIMED))
             {
                 pPlayer->SendOnTalkBubble("`2AIYEE! A ghost!``", false);
                 hitAnyPlayer = true;
@@ -485,7 +489,7 @@ void WorldNPC::CheckGhostCanSlime(WorldNPCManager* pNPCMgr)
         }
     }
 
-    if(hitAnyPlayer)
+    if (hitAnyPlayer)
     {
         pWorld->SendParticleEffectToAll(PARTICLE_EFFECT_ECTO_SPLAT, pos);
     }
@@ -504,21 +508,21 @@ bool WorldNPC::IsGhostTrap()
 
 bool WorldNPC::IsInside(WorldNPC* pNpc, float padX, float padY)
 {
-    if(!pNpc)
+    if (!pNpc)
         return false;
 
-    if(this->type == NPC_TYPE_BOSS_GHOST) 
+    if (this->type == NPC_TYPE_BOSS_GHOST)
         return false;
 
-    if(pNpc->pos.y <= this->pos.y)
+    if (pNpc->pos.y <= this->pos.y)
         return false;
 
-    if(this->pos.y <= (pNpc->pos.y - padY))
+    if (this->pos.y <= (pNpc->pos.y - padY))
         return false;
 
     float dynamicWidth = ((pNpc->pos.y - this->pos.y) * padX) / padY;
 
-    if(this->pos.x <= (pNpc->pos.x - (dynamicWidth / 2.0f)))
+    if (this->pos.x <= (pNpc->pos.x - (dynamicWidth / 2.0f)))
         return false;
 
     if ((pNpc->pos.x + (dynamicWidth / 2.0f)) <= this->pos.x)
@@ -527,26 +531,27 @@ bool WorldNPC::IsInside(WorldNPC* pNpc, float padX, float padY)
     return true;
 }
 
-void WorldNPC::OnGotHit(GamePlayer* pPlayer, const Vector2Float& hitPos, const Vector2Float& attackPos, WorldNPCManager* pNPCMgr)
+void WorldNPC::OnGotHit(GamePlayer* pPlayer, const Vector2Float& hitPos, const Vector2Float& attackPos,
+                        WorldNPCManager* pNPCMgr)
 {
-    if(!pPlayer || !pNPCMgr)
+    if (!pPlayer || !pNPCMgr)
         return;
 
     World* pWorld = pNPCMgr->GetWorld();
-    if(!pWorld)
+    if (!pWorld)
         return;
-    
-    if(type == NPC_TYPE_BOSS_GHOST)
+
+    if (type == NPC_TYPE_BOSS_GHOST)
     {
         uint16 handItem = pPlayer->GetInventory().GetClothByPart(BODY_PART_HAND);
 
-        if(handItem != ITEM_ID_NEUTRON_GUN && handItem != ITEM_ID_NEUTRON_POWER_GLOVE)
+        if (handItem != ITEM_ID_NEUTRON_GUN && handItem != ITEM_ID_NEUTRON_POWER_GLOVE)
             return;
 
-        if(pPlayer->GetInventory().GetClothByPart(BODY_PART_BACK) != ITEM_ID_NEUTRON_PACK)
+        if (pPlayer->GetInventory().GetClothByPart(BODY_PART_BACK) != ITEM_ID_NEUTRON_PACK)
             return;
 
-        if(!isInsidePowerNodes)
+        if (!isInsidePowerNodes)
             return;
 
         hp -= 10;
@@ -555,9 +560,9 @@ void WorldNPC::OnGotHit(GamePlayer* pPlayer, const Vector2Float& hitPos, const V
         return;
     }
 
-    if(IsGhost() && type != NPC_TYPE_BOSS_GHOST)
+    if (IsGhost() && type != NPC_TYPE_BOSS_GHOST)
     {
-        if(pPlayer->GetInventory().GetClothByPart(BODY_PART_HAND) == ITEM_ID_NEUTRON_POWER_GLOVE)
+        if (pPlayer->GetInventory().GetClothByPart(BODY_PART_HAND) == ITEM_ID_NEUTRON_POWER_GLOVE)
         {
             pWorld->SendNPCPacketToAll(NPC_EVENT_DIE, id, type, pos, dest, speed, val1, val2);
             pNPCMgr->RemoveNpc(id);

@@ -1,9 +1,6 @@
 #include "ENetServer.h"
 
-ENetServer::ENetServer()
-: m_pHost(nullptr)
-{
-}
+ENetServer::ENetServer() : m_pHost(nullptr) {}
 
 ENetServer::~ENetServer()
 {
@@ -12,23 +9,28 @@ ENetServer::~ENetServer()
 
 bool ENetServer::Init(const string& host, uint16 port, uint32 maxPeer)
 {
-    if(enet_initialize() != 0) {
+    if (enet_initialize() != 0)
+    {
         return false;
     }
 
     ENetAddress addr{};
-    if(!host.empty()) {
-        if(enet_address_set_host(&addr, host.c_str()) != 0) {
+    if (!host.empty())
+    {
+        if (enet_address_set_host(&addr, host.c_str()) != 0)
+        {
             return false;
         }
     }
-    else {
+    else
+    {
         addr.host = ENET_HOST_ANY;
     }
     addr.port = port;
 
     m_pHost = enet_host_create(&addr, maxPeer, 2, 0, 0);
-    if(!m_pHost) {
+    if (!m_pHost)
+    {
         return false;
     }
 
@@ -40,7 +42,8 @@ bool ENetServer::Init(const string& host, uint16 port, uint32 maxPeer)
 
 void ENetServer::Kill()
 {
-    if(m_pHost) {
+    if (m_pHost)
+    {
         enet_host_flush(m_pHost);
         enet_host_destroy(m_pHost);
         m_pHost = nullptr;
@@ -51,7 +54,7 @@ void ENetServer::Kill()
 
 bool ENetServer::Update(ENetEvent* pEvent)
 {
-    if(!m_pHost || !pEvent)
+    if (!m_pHost || !pEvent)
         return false;
 
     return enet_host_service(m_pHost, pEvent, 0) > 0;
@@ -59,7 +62,8 @@ bool ENetServer::Update(ENetEvent* pEvent)
 
 void ENetServer::SetENetIncomeCmdType(ENetHostIncomeCommandType type)
 {
-    if(!m_pHost) {
+    if (!m_pHost)
+    {
         return;
     }
 

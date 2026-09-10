@@ -36,9 +36,6 @@ enum eSocketClientStatus
     SOCKET_CLIENT_CLOSE
 };
 
-uint8* SerializeVariantVectorForTCP(const VariantVector& varVector, uint32& outSize);
-void DeSerializeVariantVectorForTCP(MemoryBuffer& memBuffer, VariantVector& out);
-
 struct NetClient
 {
     socket_t socket = SOCKET_INVALID;
@@ -66,8 +63,6 @@ struct NetClient
     bool sslWantsWrite = false;
 #endif
 
-    bool Send(const VariantVector& data);
-    bool Send(void* pData, uint32 size);
     bool Send(TCPPacketWriter& data);
-    bool Send(uint16 packetID, const void* pData, uint32 size);
+    bool Send(void* pData, uint32 size);
 };

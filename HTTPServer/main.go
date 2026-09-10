@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -156,6 +157,43 @@ func serverHandler(res http.ResponseWriter, req *http.Request) {
 	res.WriteHeader(http.StatusNotFound)
 }
 
+func IsLocalOrInvalidIP(ipStr string) bool {
+	parsedIP := net.ParseIP(ipStr)
+	if parsedIP == nil {
+		return false
+	}
+
+	ip4 := parsedIP.To4()
+	if ip4 == nil || ip4.Equal(net.IPv4zero) {
+		return false
+	}
+
+	ip := binary.BigEndian.Uint32(ip4)
+
+	if (ip & 0xFF000000) == 0x7F000000 {
+		return true
+	}
+	if (ip & 0xFF000000) == 0x0A000000 {
+		return true
+	}
+	if (ip & 0xFFF00000) == 0xAC100000 {
+		return true
+	}
+	if (ip & 0xFFFF0000) == 0xC0A80000 {
+		return true
+	}
+
+	return false
+}
+
+func GetBindAddress(configIP string) string {
+	bindIP := "0.0.0.0"
+	if IsLocalOrInvalidIP(configIP) {
+		bindIP = configIP
+	}
+	return bindIP
+}
+
 func main() {
 	if SERVER_IP == "" {
 		fmt.Println("SERVER_IP can not be empty!")
@@ -170,8 +208,11 @@ func main() {
 	mux.HandleFunc("/", serverHandler)
 	mux.HandleFunc("/cache/", cacheHandler)
 
+	bindAddr := GetBindAddress(SERVER_IP)
+	fmt.Printf("[Server] Selected Bind Address: %s\n", bindAddr)
+
 	httpServer := &http.Server{
-		Addr:    ":80",
+		Addr:    bindAddr + ":80",
 		Handler: mux,
 	}
 
@@ -181,7 +222,7 @@ func main() {
 	}()
 
 	httpsServer := &http.Server{
-		Addr:    ":443",
+		Addr:    bindAddr + ":443",
 		Handler: mux,
 	}
 

@@ -147,18 +147,3 @@ bool ServerBroadwayBase::Connect(const string& host, uint16 port, uint8 retryCou
 
     return (*pClient != nullptr);
 }
-
-bool ServerBroadwayBase::SendPacketRaw(NetClient* pClient, VariantVector& data)
-{
-    if (!m_pNetSocket)
-    {
-        return false;
-    }
-
-    if (!pClient)
-    {
-        return false;
-    }
-
-    return pClient->Send(data);
-}
