@@ -26,6 +26,7 @@ CREATE TABLE `Players` (
   `ProgressData` varbinary(512) DEFAULT NULL,
   `LastWorld` int NOT NULL DEFAULT '0',
   `ExtraData` BLOB DEFAULT NULL,
+  `PlayMods` VARBINARY(512) DEFAULT NULL;
   PRIMARY KEY (`ID`),
   KEY `idx_gid` (`GID`),
   KEY `idx_rid` (`RID`),

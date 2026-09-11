@@ -121,6 +121,7 @@ void World::OnWorldDelete()
         }
     }
 
+    std::sort(presences.begin(), presences.end());
     presences.erase(std::unique(presences.begin(), presences.end()), presences.end());
     GetGamePresenceManager()->ReleasePresence(presences);
 }
@@ -575,10 +576,7 @@ void World::SendParticleEffectToAll(float coordX, float coordY, uint32 particleT
     packet.field_9.y = particleSize;
     packet.field_7 = delay;
 
-    for (auto& pWorldPlayer : m_players)
-    {
-        SendGamePacketToAll(&packet);
-    }
+    SendGamePacketToAll(&packet);
 }
 
 void World::SendTileUpdate(TileInfo* pTile, GamePlayer* pPlayer)
