@@ -5,24 +5,24 @@
 #include "Database/Table/PlayerDBTable.h"
 #include "Player/RoleManager.h"
 
-TelnetCommandManager* GetTelnetCommandManager()
+AdminCommandManager* GetAdminCommandManager()
 {
-    return TelnetCommandManager::GetInstance();
+    return AdminCommandManager::GetInstance();
 }
 
 static void SetRoleUpdateRoleCB(QueryTaskResult&& result)
 {
-    TelnetClient* pNetClient = GetTelnetServer()->GetClientByNetID(result.ownerID);
+    AdminClient* pNetClient = GetAdminServer()->GetClientByNetID(result.ownerID);
     if (!pNetClient)
         return;
 
     if (result.status != QUERY_STATUS_OK)
     {
-        pNetClient->SendMessage("Failed update role id for user.", true);
+        pNetClient->SendPacket("Failed update role id for user.");
     }
     else
     {
-        pNetClient->SendMessage("Successfully updated player's role", true);
+        pNetClient->SendPacket("Successfully updated player's role");
 
         Variant* pRoleID = result.GetExtraData(0);
         Variant* pUserID = result.GetExtraData(1);
@@ -46,15 +46,13 @@ static void SetRoleUpdateRoleCB(QueryTaskResult&& result)
 
 static void SetRoleCheckPlayerCB(QueryTaskResult&& result)
 {
-    TelnetClient* pNetClient = GetTelnetServer()->GetClientByNetID(result.ownerID);
+    AdminClient* pNetClient = GetAdminServer()->GetClientByNetID(result.ownerID);
     if (!pNetClient)
-    {
         return;
-    }
 
     if (!result.result)
     {
-        pNetClient->SendMessage("Error happened while checking user.", true);
+        pNetClient->SendPacket("Error happened while checking user.");
         pNetClient->SetBusy(false);
         return;
     }
@@ -66,7 +64,7 @@ static void SetRoleCheckPlayerCB(QueryTaskResult&& result)
 
         if (!pRoleID || !pUserID)
         {
-            pNetClient->SendMessage("Oops! Something went wrong.", true);
+            pNetClient->SendPacket("Oops! Something went wrong.");
             pNetClient->SetBusy(false);
             return;
         }
@@ -79,7 +77,7 @@ static void SetRoleCheckPlayerCB(QueryTaskResult&& result)
     }
     else
     {
-        pNetClient->SendMessage("User not found.", true);
+        pNetClient->SendPacket("User not found.");
         pNetClient->SetBusy(false);
         return;
     }
@@ -88,9 +86,7 @@ static void SetRoleCheckPlayerCB(QueryTaskResult&& result)
 MAKE_COMMAND(SetRole, "/setrole <userID> <roleID>", "Set player's RoleID", 4, "setrole"_hash)
 {
     if (!pNetClient || args.empty() || !CheckPerm(pNetClient))
-    {
         return;
-    }
 
     if (args.size() < 3)
     {
@@ -101,27 +97,27 @@ MAKE_COMMAND(SetRole, "/setrole <userID> <roleID>", "Set player's RoleID", 4, "s
     uint32 userID = 0;
     if (ToUInt(args[1], userID) != TO_INT_SUCCESS)
     {
-        pNetClient->SendMessage("UserID must be number.", true);
+        pNetClient->SendPacket("UserID must be number.");
         return;
     }
 
     if (userID == 0)
     {
-        pNetClient->SendMessage("User not found.", true);
+        pNetClient->SendPacket("User not found.");
         return;
     }
 
     uint32 roleID = 0;
     if (ToUInt(args[2], roleID) != TO_INT_SUCCESS)
     {
-        pNetClient->SendMessage("RoleID must be number.", true);
+        pNetClient->SendPacket("RoleID must be number.");
         return;
     }
 
     Role* pRole = GetRoleManager()->GetRole(roleID);
     if (!pRole)
     {
-        pNetClient->SendMessage("RoleID not found.", true);
+        pNetClient->SendPacket("RoleID not found.");
         return;
     }
 
@@ -134,7 +130,34 @@ MAKE_COMMAND(SetRole, "/setrole <userID> <roleID>", "Set player's RoleID", 4, "s
     DatabasePlayerExec(GetContext()->GetDatabasePool(), req);
 }
 
-void TelnetCommandManager::RegisterAllCommands()
+MAKE_COMMAND(Shutdown, "/shutdown", "Shutdown all game servers and master server", 4, "shutdown"_hash)
+{
+    if (!pNetClient || !CheckPerm(pNetClient))
+        return;
+
+    pNetClient->SendPacket("Initiating server shutdown sequence...");
+
+    GetServerManager()->ShutdownAllServers();
+}
+
+MAKE_COMMAND(Broadcast, "/broadcast <message>", "Broadcasts message to game servers", 3, "broadcast"_hash)
+{
+    if (!pNetClient || !CheckPerm(pNetClient))
+        return;
+
+    if (args.size() < 2)
+    {
+        SendUsage(pNetClient);
+        return;
+    }
+
+    GetServerManager()->SendCommandBroadcastMessageToAll("`4Global System Message: `$" + args[1], "", "");
+    pNetClient->SendPacket("Sent broadcast message to all game servers");
+}
+
+void AdminCommandManager::RegisterAllCommands()
 {
     Register<Command_SetRole>();
+    Register<Command_Shutdown>();
+    Register<Command_Broadcast>();
 }

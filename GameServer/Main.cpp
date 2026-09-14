@@ -20,13 +20,6 @@
 
 bool firstCallShutdown = false;
 
-#include <signal.h>
-void SignalStop(int32 signum)
-{
-    GetContext()->Shutdown();
-    // GetContext()->Stop();
-}
-
 void ForceSaveEverything()
 {
     firstCallShutdown = true;
@@ -101,9 +94,6 @@ void DatabaseThreadFunc()
             GetLog()->Write();
             logTimer.Reset();
         }
-
-        if (pWorker->GetQueueSize() == 0)
-            SleepMS(2);
     }
 }
 
@@ -245,17 +235,27 @@ bool LoadItemData()
         pGameConfig->androidSupportedVersions[1], pGameConfig->windowsSupportedVersions[1],
         pGameConfig->iosSupportedVersions[1], pGameConfig->macosSupportedVersions[1]);
 
+    bool allSupportZLib =
+        (pGameConfig->androidSupportedVersions[0] >= 3.02f) && (pGameConfig->windowsSupportedVersions[0] >= 3.02f) &&
+        (pGameConfig->iosSupportedVersions[0] >= 3.02f) && (pGameConfig->macosSupportedVersions[0] >= 3.02f);
+
+    uint32 totalSavedSize = 0;
+
+    LOGGER_LOG_INFO("Serializing item data into memory");
+
     if (!usingGTCDN)
     {
         pItemMgr->LoadFileHashes(hashData, false);
     }
-    pItemMgr->SaveToClientData(false, minVersion, maxVersion);
+    pItemMgr->SaveToClientData(false, minVersion, maxVersion, allSupportZLib, totalSavedSize);
 
     if (!usingGTCDN)
     {
         pItemMgr->LoadFileHashes(hashData, true);
     }
-    pItemMgr->SaveToClientData(true, minVersion, maxVersion);
+    pItemMgr->SaveToClientData(true, minVersion, maxVersion, allSupportZLib, totalSavedSize);
+
+    LOGGER_LOG_INFO("Items data totally takes %d bytes from memory", totalSavedSize);
 
     if (!pItemMgr->LoadConsumableData(GetProgramPath() + "/consumable_data.txt"))
     {
@@ -399,8 +399,7 @@ void RunGameLoop()
 
 int main(int argc, char const* argv[])
 {
-    signal(SIGTERM, SignalStop);
-    signal(SIGINT, SignalStop);
+    SystemSignal::RegisterShutdownHook(GetContext()->GetShutdownFlag());
 
     if (!ReadArgs(argc, argv))
         return 0;
@@ -537,6 +536,7 @@ int main(int argc, char const* argv[])
     LOGGER_LOG_INFO("Killing Game server %d", GetContext()->GetID());
 
     GetLog()->Flush();
+    GetContext()->GetDatabasePool()->GetWorker(0)->SendFakeTask();
 
     if (dbThread.joinable())
         dbThread.join();
@@ -552,5 +552,7 @@ int main(int argc, char const* argv[])
     GetLog()->Kill();
 
     mysql_library_end();
+
+    SystemSignal::SignalShutdownComplete();
     return 0;
 }

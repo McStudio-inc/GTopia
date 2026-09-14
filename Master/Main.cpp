@@ -4,18 +4,11 @@
 #include "Math/Random.h"
 #include "Player/GamePlayer.h"
 #include "Player/RoleManager.h"
+#include "Server/AdminServer.h"
 #include "Server/GameServer.h"
 #include "Server/ServerManager.h"
-#include "Server/TelnetServer.h"
 #include "Utils/Timer.h"
 #include "World/WorldManager.h"
-
-#include <signal.h>
-void SignalStop(int32 signum)
-{
-    LOGGER_LOG_WARN_ASAP("Received signal %d", signum);
-    GetContext()->Shutdown();
-}
 
 void DatabaseThreadFunc()
 {
@@ -43,8 +36,6 @@ void DatabaseThreadFunc()
             GetLog()->Write();
             lastLogWriteTime = Time::GetSystemTime();
         }
-
-        SleepMS(1);
     }
 }
 
@@ -52,7 +43,7 @@ void EventThreadFunc()
 {
     GameServer* pGameServer = GetGameServer();
     ServerManager* pServerMgr = GetServerManager();
-    TelnetServer* pTelnetServer = GetTelnetServer();
+    AdminServer* pAdminServer = GetAdminServer();
     Context* pContext = GetContext();
 
     uint64 lastCalculateTime = Time::GetSystemTime();
@@ -82,7 +73,7 @@ void EventThreadFunc()
 
         pGameServer->Update();
         pServerMgr->Update(false);
-        pTelnetServer->Update(); // todo here handle on gameloop
+        pAdminServer->Update(); // todo here handle on gameloop
 
         uint64 workEnd = Time::GetSystemTime();
         totalWorkTime += (workEnd - workStart);
@@ -240,8 +231,7 @@ void RunGameLoop()
 
 int main(int argc, char const* argv[])
 {
-    signal(SIGTERM, SignalStop);
-    signal(SIGINT, SignalStop);
+    SystemSignal::RegisterShutdownHook(GetContext()->GetShutdownFlag());
 
     if (!GetLog()->InitFile(GetProgramPath() + "/logs/log_MASTER.txt"))
     {
@@ -319,32 +309,32 @@ int main(int argc, char const* argv[])
 
     // RegisterBalancedWorlds();
 
-    if (pGameConfig->enableTelnetServer)
+    AdminServer* pAdminServer = GetAdminServer();
+    if (pAdminServer->LoadConfigFromFile(GetProgramPath() + "/admin_server_config.txt"))
     {
-        TelnetServer* pTelnetServer = GetTelnetServer();
-        if (pTelnetServer->LoadTelnetConfigFromFile(GetProgramPath() + "/telnet_config.txt"))
+        if (!pAdminServer->IsEnabled())
         {
-            if (!pTelnetServer->Init())
+            LOGGER_LOG_INFO_ASAP("Not starting admin server its disabled");
+        }
+        else
+        {
+            if (!pAdminServer->Init())
             {
-                LOGGER_LOG_ERROR_ASAP("Failed to initialize telnet server on %s:%d", pTelnetServer->GetHost().c_str(),
-                                      pTelnetServer->GetPort());
+                LOGGER_LOG_ERROR_ASAP("Failed to initialize admin server on %s:%d", pAdminServer->GetHost().c_str(),
+                                      pAdminServer->GetPort());
                 GetContext()->Kill();
                 return 0;
             }
             else
             {
-                LOGGER_LOG_INFO_ASAP("Started telnet server on %s:%d", pTelnetServer->GetHost().c_str(),
-                                     pTelnetServer->GetPort());
+                LOGGER_LOG_INFO_ASAP("Started admin server on %s:%d", pAdminServer->GetHost().c_str(),
+                                     pAdminServer->GetPort());
             }
-        }
-        else
-        {
-            LOGGER_LOG_ERROR_ASAP("Failed to load telnet_config.txt not gonna initialize telnet server");
         }
     }
     else
     {
-        LOGGER_LOG_INFO_ASAP("Not starting telnet server its disabled in config");
+        LOGGER_LOG_ERROR_ASAP("Failed to load admin_server_config.txt not gonna initialize admin server");
     }
 
     gNetBurstConfig.threshold.heavyQueueSize = pGameConfig->netThreshold.heavyQueueSize;
@@ -363,13 +353,15 @@ int main(int argc, char const* argv[])
     LOGGER_LOG_INFO_ASAP("Killing Master server");
 
     GetLog()->Flush();
+    GetContext()->GetDatabasePool()->GetWorker(0)->SendFakeTask();
 
     if (dbThread.joinable())
         dbThread.join();
+
     if (eventThread.joinable())
         eventThread.join();
 
-    GetTelnetServer()->Kill();
+    GetAdminServer()->Kill();
     GetGameServer()->Kill();
     GetServerManager()->Kill();
 
@@ -377,5 +369,7 @@ int main(int argc, char const* argv[])
     GetContext()->Kill();
 
     mysql_library_end();
+
+    SystemSignal::SignalShutdownComplete();
     return 0;
 }

@@ -10,23 +10,30 @@ VariantVector OnWelcomePacket(uint32 protocol, float gameVersion, uint32 itemsDa
     VariantVector data(protocol < 93 ? 6 : 7);
 
     string osmHeader;
-    if (gameVersion <= 2.982f)
+    if (gameVersion <= 1.53f)
     {
-        if (gameVersion <= 2.479f)
-        {
-            if (gameVersion <= 2.459f)
-            {
-                if (2.449f < gameVersion)
-                    osmHeader = "OnSuperMainStartAcceptLogonFB211131d";
-            }
-            else
-                osmHeader = "OnSuperMainStartAcceptLogonFB211131dd";
-        }
-        else
-            osmHeader = "OnSuperMainStartAcceptLogonFB211131ddf";
+        osmHeader = "OnInitialLogonAccepted";
+    }
+    else if (gameVersion <= 2.24f)
+    {
+        osmHeader = "OnSuperMainStartAcceptLogonFB2111";
+    }
+    else if (gameVersion <= 2.27f)
+    {
+        osmHeader = "OnSuperMainStartAcceptLogonFB2";
+    }
+    else if (gameVersion <= 2.56f)
+    {
+        osmHeader = "OnSuperMainStartAcceptLogonFB211131ddf";
+    }
+    else if (gameVersion <= 2.982f)
+    {
+        osmHeader = "OnSuperMainStartAcceptLogonFB211131ddf";
     }
     else
+    {
         osmHeader = "OnSuperMainStartAcceptLogonHrdxs47254722215a";
+    }
 
     data[0] = osmHeader;
     data[1] = itemsDatHash;

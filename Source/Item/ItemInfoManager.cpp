@@ -9,7 +9,7 @@
 
 int32 ItemInfoManager::sMaxPositiveID = 0;
 
-uint16 GetSupportedItemDataVersion(float gameVersion)
+uint16 ChooseItemDataVersionForClient(float gameVersion)
 {
     for (auto& version : sItemDataVersionMap)
     {
@@ -22,13 +22,13 @@ uint16 GetSupportedItemDataVersion(float gameVersion)
 uint16 GetMinRequiredItemDataVersion(float a, float b, float c, float d)
 {
     float minV = Min(Min(a, b), Min(c, d));
-    return GetSupportedItemDataVersion(minV);
+    return ChooseItemDataVersionForClient(minV);
 }
 
 uint16 GetMaxRequiredItemDataVersion(float a, float b, float c, float d)
 {
     float maxV = Max(Max(a, b), Max(c, d));
-    return GetSupportedItemDataVersion(maxV);
+    return ChooseItemDataVersionForClient(maxV);
 }
 
 uint32 StrToConsumableFlag(const string& str)
@@ -580,7 +580,8 @@ void ItemInfoManager::LoadFileHashes(const std::unordered_map<string, uint32>& h
     }
 }
 
-void ItemInfoManager::SaveToClientData(bool forOgg, uint16 minVersion, uint16 maxVersion)
+void ItemInfoManager::SaveToClientData(bool forOgg, uint16 minVersion, uint16 maxVersion, bool allSupportZLib,
+                                       uint32& totalOutSize)
 {
     if (m_version != 0)
     {
@@ -597,8 +598,9 @@ void ItemInfoManager::SaveToClientData(bool forOgg, uint16 minVersion, uint16 ma
         }
 
         uint32 memSize = memSizeBuffer.GetOffset() + sizeof(m_version) + sizeof(m_itemCount);
+        uint8* pData = new uint8[memSize];
 
-        MemoryBuffer memBuffer(memSize);
+        MemoryBuffer memBuffer(pData, memSize);
         memBuffer.Write(i);
         memBuffer.Write(m_itemCount);
 
@@ -607,23 +609,26 @@ void ItemInfoManager::SaveToClientData(bool forOgg, uint16 minVersion, uint16 ma
             item.Serialize(memBuffer, true, false, i);
         }
 
-        uint32 compressSize = 0;
-        uint8* pCompress = zLibDefalteToMemory(memBuffer.GetData(), memBuffer.GetOffset(), compressSize);
+        bool shouldCompress = allSupportZLib || (m_version == 0 && i >= 12);
 
-        if (forOgg)
+        uint32 compressSize = 0;
+        uint8* pFinalData = memBuffer.GetData();
+
+        if (shouldCompress)
         {
-            m_itemDataOgg[i].pItemData = pCompress;
-            m_itemDataOgg[i].size = memSize;
-            m_itemDataOgg[i].compressSize = compressSize;
-            m_itemDataOgg[i].hash = Proton::HashString((const char*)memBuffer.GetData(), memBuffer.GetOffset());
+            uint8* pCompress = zLibDefalteToMemory(memBuffer.GetData(), memBuffer.GetOffset(), compressSize);
+            pFinalData = pCompress;
         }
-        else
-        {
-            m_itemDataMp3[i].pItemData = pCompress;
-            m_itemDataMp3[i].size = memSize;
-            m_itemDataMp3[i].compressSize = compressSize;
-            m_itemDataMp3[i].hash = Proton::HashString((const char*)memBuffer.GetData(), memBuffer.GetOffset());
-        }
+
+        uint32 hash = Proton::HashString((const char*)memBuffer.GetData(), memBuffer.GetOffset());
+
+        auto& targetData = forOgg ? m_itemDataOgg[i] : m_itemDataMp3[i];
+        targetData.pItemData = pData;
+        targetData.size = memSize;
+        targetData.compressSize = compressSize;
+        targetData.hash = hash;
+
+        totalOutSize += (compressSize == 0 ? targetData.size : targetData.compressSize);
 
         memBuffer.Destroy();
     }
@@ -674,7 +679,7 @@ BattlePetInfo* ItemInfoManager::GetBattlePetInfo(int32 itemID)
 
 ItemsClientData* ItemInfoManager::GetClientData(uint8 platformType, float gameVersion)
 {
-    uint16 supportedVersion = m_version != 0 ? m_version : GetSupportedItemDataVersion(gameVersion);
+    uint16 supportedVersion = m_version != 0 ? m_version : ChooseItemDataVersionForClient(gameVersion);
 
     if (platformType == Proton::PLATFORM_ID_ANDROID)
     {

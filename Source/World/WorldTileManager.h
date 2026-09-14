@@ -41,8 +41,9 @@ public:
     ~WorldTileManager();
 
 public:
-    bool Serialize(MemoryBuffer& memBuffer, bool write, bool database, WorldInfo* pWorld, float gameVersion = 0.0f);
-    uint32 GetMemEstimate(bool database, WorldInfo* pWorld, float gameVersion);
+    bool Serialize(MemoryBuffer& memBuffer, bool write, bool database, WorldInfo* pWorld, int16 worldVersion = -1,
+                   float gameVersion = 0.0f);
+    uint32 GetMemEstimate(bool database, WorldInfo* pWorld, int16 worldVersion = -1, float gameVersion = 0.0f);
 
     void Clear(bool reInit = false);
 

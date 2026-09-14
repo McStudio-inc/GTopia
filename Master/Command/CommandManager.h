@@ -1,12 +1,12 @@
 #pragma once
 
-#include "../Server/TelnetServer.h"
+#include "../Server/AdminServer.h"
 #include "Event/EventDispatcher.h"
 #include "IO/Log.h"
 #include "Precompiled.h"
 #include "Utils/StringUtils.h"
 
-struct TelnetCommandInfo
+struct AdminCommandInfo
 {
     string usage = "";
     string desc = "";
@@ -14,12 +14,12 @@ struct TelnetCommandInfo
     std::vector<uint32> aliases;
 };
 
-template <typename T> class TelnetCommandBase
+template <typename T> class AdminCommandBase
 {
 public:
-    static const TelnetCommandInfo& GetInfo() { return T::GetInfo(); }
+    static const AdminCommandInfo& GetInfo() { return T::GetInfo(); }
 
-    static void Execute(TelnetClient* pNetClient, std::vector<string>& args)
+    static void Execute(AdminClient* pNetClient, std::vector<string>& args)
     {
         if (!CheckPerm(pNetClient))
             return;
@@ -27,68 +27,68 @@ public:
         T::Execute(pNetClient, args);
     }
 
-    static bool CheckPerm(TelnetClient* pNetClient)
+    static bool CheckPerm(AdminClient* pNetClient)
     {
         if (!pNetClient || pNetClient->GetAdminLevel() < GetInfo().minAdminLevel)
         {
-            pNetClient->SendMessage("Unknown command.", true);
+            pNetClient->SendPacket("Unknown command.");
             return false;
         }
 
         return true;
     }
 
-    static void SendUsage(TelnetClient* pNetClient)
+    static void SendUsage(AdminClient* pNetClient)
     {
         if (!pNetClient)
             return;
 
-        pNetClient->SendMessage("Command usage: " + GetInfo().usage, false);
+        pNetClient->SendPacket("Command usage: " + GetInfo().usage);
     }
 };
 
-class TelnetCommandManager
+class AdminCommandManager
 {
 public:
-    TelnetCommandManager() = default;
-    ~TelnetCommandManager() = default;
+    AdminCommandManager() = default;
+    ~AdminCommandManager() = default;
 
 public:
-    static TelnetCommandManager* GetInstance()
+    static AdminCommandManager* GetInstance()
     {
-        static TelnetCommandManager instance;
+        static AdminCommandManager instance;
         return &instance;
     }
 
 public:
     void RegisterAllCommands();
 
-    void ExecuteCommand(TelnetClient* pNetClient, std::vector<string>& args)
+    void ExecuteCommand(AdminClient* pNetClient, std::vector<string>& args)
     {
         if (!pNetClient)
             return;
 
         if (pNetClient->GetAdminLevel() == 0 || args.empty())
         {
-            pNetClient->SendMessage("Unknown command.", true);
+            pNetClient->SendPacket("Unknown command.");
             return;
         }
 
         if (args[0].size() < 2 || args[0][0] != '/')
         {
-            pNetClient->SendMessage("Unknown command. Commands must start with '/'", true);
+            pNetClient->SendPacket("Unknown command. Commands must start with '/'");
             return;
         }
 
         uint32 hashCmd = HashString(args[0].substr(1));
         if (!m_commands.HasHandler(hashCmd))
         {
-            pNetClient->SendMessage("Unknown command.", true);
+            pNetClient->SendPacket("Unknown command.");
             return;
         }
 
-        LOGGER_LOG_INFO("[Telnet] Client IP: %s Name: %s executed: %s", pNetClient->GetIP().c_str(),
-                        pNetClient->GetDisplayName().c_str(), JoinString(args, " ").c_str());
+        LOGGER_LOG_INFO("[Admin] Command executed by Name: %s (IP: %s) -> '%s'", pNetClient->GetDisplayName().c_str(),
+                        pNetClient->GetIP().c_str(), JoinString(args, " ").c_str());
 
         m_commands.Dispatch(hashCmd, pNetClient, args);
     }
@@ -98,25 +98,25 @@ private:
     {
         for (auto& alias : T::GetInfo().aliases)
         {
-            m_commands.Register(alias, Delegate<TelnetClient*, std::vector<string>&>::Create<&T::Execute>());
+            m_commands.Register(alias, Delegate<AdminClient*, std::vector<string>&>::Create<&T::Execute>());
         }
     }
 
 private:
-    EventDispatcher<uint32, TelnetClient*, std::vector<string>&> m_commands;
+    EventDispatcher<uint32, AdminClient*, std::vector<string>&> m_commands;
 };
 
-TelnetCommandManager* GetTelnetCommandManager();
+AdminCommandManager* GetAdminCommandManager();
 
 #define MAKE_COMMAND(Name, Usage, Desc, Perm, ...)                                                                     \
-    class Command_##Name : public TelnetCommandBase<Command_##Name>                                                    \
+    class Command_##Name : public AdminCommandBase<Command_##Name>                                                     \
     {                                                                                                                  \
     public:                                                                                                            \
-        static const TelnetCommandInfo& GetInfo()                                                                      \
+        static const AdminCommandInfo& GetInfo()                                                                       \
         {                                                                                                              \
-            static TelnetCommandInfo info = {Usage, Desc, Perm, {__VA_ARGS__}};                                        \
+            static AdminCommandInfo info = {Usage, Desc, Perm, {__VA_ARGS__}};                                         \
             return info;                                                                                               \
         }                                                                                                              \
-        static void Execute(TelnetClient* pNetClient, std::vector<string>& args);                                      \
+        static void Execute(AdminClient* pNetClient, std::vector<string>& args);                                       \
     };                                                                                                                 \
-    void Command_##Name::Execute(TelnetClient* pNetClient, std::vector<string>& args)
+    void Command_##Name::Execute(AdminClient* pNetClient, std::vector<string>& args)

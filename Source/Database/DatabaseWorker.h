@@ -4,7 +4,7 @@
 #include "DatabaseManager.h"
 #include "PreparedParam.h"
 #include "QueryUtils.h"
-#include <concurrentqueue.h>
+#include <blockingconcurrentqueue.h>
 
 #define QUERY_TIMEOUT_MS 3000
 #define PREPARED_PARAM_MAX_SIZE 15
@@ -20,6 +20,8 @@ public:
 public:
     bool Init(DatabasePool* pDbPool, const DatabaseConnectConfig& config);
     void Kill();
+
+    void SendFakeTask(); // to wake up blocking concurrent queue
 
     void Update();
     void AddTask(QueryTaskRequest&& taskReq);
@@ -37,7 +39,7 @@ private:
     DatabaseManager* m_pDatabaseMgr;
     PreparedParam* m_pPrepParam;
     DatabasePool* m_pDbPool;
-    moodycamel::ConcurrentQueue<QueryTaskRequest> m_taskQueue;
+    moodycamel::BlockingConcurrentQueue<QueryTaskRequest> m_taskQueue;
 
     Timer m_lastConnTime;
     DatabaseConnectConfig m_config;

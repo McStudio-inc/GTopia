@@ -15,7 +15,9 @@
 #include "WorldManager.h"
 
 World::World()
-    : m_databaseID(0), m_state(WORLD_STATE_LOADING), m_instanceID(0), m_balancerType(-1), m_suckerManager(this)
+    : m_databaseID(0), m_state(WORLD_STATE_LOADING), m_instanceID(0), m_balancerType(-1), m_suckerManager(this),
+      m_minWorldVersionInWorld(14), m_maxWorldVersionInWorld(14), m_maxGameVersionInWorld(99.f),
+      m_minGameVersionInWorld(99.f)
 {
     m_pNpcManager = new WorldNPCManager(this);
     m_pBossManager = new WorldBossManager(this);
@@ -305,9 +307,13 @@ void World::AddPlayer(GamePlayer* pPlayer, bool newJoin)
     loginDetail.doorID = "";
     pPlayer->ClosePaginatedDialog();
 
-    uint32 worldMemSize = GetMemEstimate(false, loginDetail.gameVersion);
+    uint16 playerWorldVersion = pPlayer->GetWorldVersion();
+    WorldClientVersionKey key{playerWorldVersion, loginDetail.gameVersion};
+    m_versionBuckets[key].push_back(pPlayer);
+
+    uint32 worldMemSize = GetMemEstimate(false, playerWorldVersion, loginDetail.gameVersion);
     MemoryBuffer memBuffer(worldMemSize);
-    Serialize(memBuffer, true, false, loginDetail.gameVersion);
+    Serialize(memBuffer, true, false, playerWorldVersion, loginDetail.gameVersion);
 
     GameUpdatePacket packet;
     packet.type = NET_GAME_PACKET_SEND_MAP_DATA;
@@ -429,6 +435,27 @@ void World::PlayerLeaveWorld(GamePlayer* pPlayer, bool hardLeave)
     {
         m_players[playerIdx] = m_players.back();
         m_players.pop_back();
+
+        WorldClientVersionKey key{pPlayer->GetWorldVersion(), pPlayer->GetLoginDetail().gameVersion};
+        auto it = m_versionBuckets.find(key);
+        if (it != m_versionBuckets.end())
+        {
+            auto& vec = it->second;
+            auto playerIt = std::find(vec.begin(), vec.end(), pPlayer);
+
+            if (playerIt != vec.end())
+            {
+                *playerIt = vec.back();
+                vec.pop_back();
+            }
+
+            if (vec.empty())
+            {
+                m_versionBuckets.erase(it);
+            }
+        }
+
+        RecalculateWorldVersionBounds();
 
         pPlayer->GetModController().RemovePlayMod(PLAYMOD_TYPE_XENONITE);
         pPlayer->GetModController().RemovePlayMod(PLAYMOD_TYPE_IN_THE_SPOTLIGHT);
@@ -579,18 +606,16 @@ void World::SendParticleEffectToAll(float coordX, float coordY, uint32 particleT
     SendGamePacketToAll(&packet);
 }
 
-void World::SendTileUpdate(TileInfo* pTile, GamePlayer* pPlayer)
+void World::SendTileUpdate(TileInfo* pTile)
 {
     if (!pTile)
-    {
         return;
-    }
 
     Vector2Int& vTilePos = pTile->GetPos();
-    SendTileUpdate(vTilePos.x, vTilePos.y, pPlayer);
+    SendTileUpdate(vTilePos.x, vTilePos.y);
 }
 
-void World::SendTileUpdate(uint16 tileX, uint16 tileY, GamePlayer* pPlayer)
+void World::SendTileUpdate(uint16 tileX, uint16 tileY)
 {
     TileInfo* pTile = GetTileManager()->GetTile(tileX, tileY);
     if (!pTile)
@@ -602,13 +627,84 @@ void World::SendTileUpdate(uint16 tileX, uint16 tileY, GamePlayer* pPlayer)
     packet.field_12 = tileY;
     packet.flags |= GAME_PACKET_FLAG_EXTENDED_DATA;
 
-    uint32 tileMemSize = pTile->GetMemEstimate(false, GetWorldVersion());
-    packet.extraDataSize = tileMemSize;
+    uint8 extraType = pTile->GetTileExtraType();
+    float minReqGameVer = GetTileExtraMinGameVersion(extraType);
+    auto& bounds = GetTileVersionBounds(extraType);
 
-    MemoryBuffer memBuffer(tileMemSize);
-    pTile->Serialize(memBuffer, true, false, GetWorldVersion());
+    // everyone in world supports this tile extra AND world version > maxThreshold
+    if (m_minGameVersionInWorld >= minReqGameVer && m_minWorldVersionInWorld > bounds.maxThreshold)
+    {
+        uint32 bufferSize = pTile->GetMemEstimate(false, 14, m_minGameVersionInWorld);
 
-    SendGamePacketToAll(&packet, nullptr, memBuffer.GetData());
+        MemoryBuffer memBuffer(bufferSize);
+        pTile->Serialize(memBuffer, true, false, 14, m_minGameVersionInWorld);
+        packet.extraDataSize = memBuffer.GetOffset();
+
+        SendGamePacketToAll(&packet, nullptr, memBuffer.GetData());
+        return;
+    }
+
+    if (m_maxWorldVersionInWorld <= bounds.minThreshold)
+    {
+        uint32 bufferSize = pTile->GetMemEstimate(false, bounds.minThreshold, m_minGameVersionInWorld);
+
+        MemoryBuffer memBuffer(bufferSize);
+        pTile->Serialize(memBuffer, true, false, bounds.minThreshold, m_minGameVersionInWorld);
+        packet.extraDataSize = memBuffer.GetOffset();
+
+        SendGamePacketToAll(&packet, nullptr, memBuffer.GetData());
+        return;
+    }
+
+    // mixed world matching specific version buckets
+    struct SerializedCache
+    {
+        uint16 eqVersion = 0;
+        float gameVersion = 0.0f;
+        std::vector<uint8> buffer;
+        uint32 size = 0;
+    };
+
+    SerializedCache cache[4];
+    uint8 cacheCount = 0;
+
+    for (auto& [verBucket, playerGroup] : m_versionBuckets)
+    {
+        if (playerGroup.empty())
+            continue;
+
+        uint16 eqVer = GetTileEquivalenceVersion(extraType, verBucket.worldVersion);
+
+        int32 cacheIdx = -1;
+        for (uint8 i = 0; i < cacheCount; ++i)
+        {
+            if (cache[i].eqVersion == eqVer && cache[i].gameVersion == verBucket.gameVersion)
+            {
+                cacheIdx = i;
+                break;
+            }
+        }
+
+        if (cacheIdx == -1 && cacheCount < 4)
+        {
+            cacheIdx = cacheCount++;
+            cache[cacheIdx].eqVersion = eqVer;
+            cache[cacheIdx].gameVersion = verBucket.gameVersion;
+
+            uint32 bufferSize = pTile->GetMemEstimate(false, eqVer, verBucket.gameVersion);
+            cache[cacheIdx].buffer.resize(bufferSize);
+
+            MemoryBuffer memBuffer(cache[cacheIdx].buffer.data(), cache[cacheIdx].buffer.size());
+            pTile->Serialize(memBuffer, true, false, eqVer, verBucket.gameVersion);
+            cache[cacheIdx].size = memBuffer.GetOffset();
+        }
+
+        if (cacheIdx != -1)
+        {
+            packet.extraDataSize = cache[cacheIdx].size;
+            SendGamePacketToGroup(playerGroup, &packet, cache[cacheIdx].buffer.data());
+        }
+    }
 }
 
 void World::SendTileUpdateMultiple(const std::vector<TileInfo*>& tiles)
@@ -616,36 +712,75 @@ void World::SendTileUpdateMultiple(const std::vector<TileInfo*>& tiles)
     if (tiles.empty())
         return;
 
-    MemoryBuffer memSizeBuf;
-    for (auto& pTile : tiles)
+    // check if ALL tiles are supported by the lowest game version in the world
+    bool allTilesSupported = true;
+    for (TileInfo* pTile : tiles)
     {
-        // this should be ok instead using GetMemEstimate
-        pTile->Serialize(memSizeBuf, true, false, GetWorldVersion());
+        if (pTile->HasExtra())
+        {
+            if (m_minGameVersionInWorld < GetTileExtraMinGameVersion(pTile->GetTileExtraType()))
+            {
+                allTilesSupported = false;
+                break;
+            }
+        }
     }
 
-    uint32 memSize = tiles.size() * 2 * sizeof(int32) + memSizeBuf.GetOffset() + sizeof(int32);
-
-    MemoryBuffer memBuffer(memSize);
-    for (auto& pTile : tiles)
+    // all clients in world support all tiles
+    if (allTilesSupported)
     {
-        Vector2Int vTilePos = pTile->GetPos();
-        memBuffer.Write((int32)vTilePos.x);
-        memBuffer.Write((int32)vTilePos.y);
+        MemoryBuffer memBuffer;
+        for (auto& pTile : tiles)
+        {
+            Vector2Int& vTilePos = pTile->GetPos();
+            memBuffer.Write(vTilePos.x);
+            memBuffer.Write(vTilePos.y);
 
-        pTile->Serialize(memBuffer, true, false, GetWorldVersion());
+            pTile->Serialize(memBuffer, true, false, GetWorldVersion(), m_minGameVersionInWorld);
+        }
+
+        int32 endMarker = -1;
+        memBuffer.Write(endMarker);
+
+        GameUpdatePacket packet;
+        packet.type = NET_GAME_PACKET_SEND_TILE_UPDATE_DATA_MULTIPLE;
+        packet.flags |= GAME_PACKET_FLAG_EXTENDED_DATA;
+        packet.extraDataSize = memBuffer.GetOffset();
+        packet.field_11 = -1;
+        packet.field_12 = -1;
+
+        SendGamePacketToAll(&packet, nullptr, memBuffer.GetData());
+        return;
     }
 
-    int32 endMarker = -1;
-    memBuffer.Write(endMarker);
+    // iterate version buckets only when an unsupported client is actually present
+    for (auto& [verBucket, playerGroup] : m_versionBuckets)
+    {
+        if (playerGroup.empty())
+            continue;
 
-    GameUpdatePacket packet;
-    packet.type = NET_GAME_PACKET_SEND_TILE_UPDATE_DATA_MULTIPLE;
-    packet.flags |= GAME_PACKET_FLAG_EXTENDED_DATA;
-    packet.extraDataSize = memSize;
-    packet.field_11 = -1;
-    packet.field_12 = -1;
+        MemoryBuffer memBuffer;
+        for (auto& pTile : tiles)
+        {
+            Vector2Int& vTilePos = pTile->GetPos();
+            memBuffer.Write(vTilePos.x);
+            memBuffer.Write(vTilePos.y);
 
-    SendGamePacketToAll(&packet, nullptr, memBuffer.GetData());
+            pTile->Serialize(memBuffer, true, false, verBucket.worldVersion, verBucket.gameVersion);
+        }
+
+        int32 endMarker = -1;
+        memBuffer.Write(endMarker);
+
+        GameUpdatePacket packet;
+        packet.type = NET_GAME_PACKET_SEND_TILE_UPDATE_DATA_MULTIPLE;
+        packet.flags |= GAME_PACKET_FLAG_EXTENDED_DATA;
+        packet.extraDataSize = memBuffer.GetOffset();
+        packet.field_11 = -1;
+        packet.field_12 = -1;
+
+        SendGamePacketToGroup(playerGroup, &packet, memBuffer.GetData());
+    }
 }
 
 void World::SendTileApplyDamage(TileInfo* pTile, int32 damage, int32 netID)
@@ -991,10 +1126,20 @@ void World::SendGamePacketToAll(GameUpdatePacket* pPacket, GamePlayer* pExceptMe
         if (pWorldPlayer)
         {
             if (pExceptMe && (pWorldPlayer == pExceptMe))
-            {
                 continue;
-            }
 
+            SendUDPPacketRaw(pWorldPlayer->GetNetID(), NET_MESSAGE_GAME_PACKET, pPacket, sizeof(GameUpdatePacket),
+                             pExtraData);
+        }
+    }
+}
+
+void World::SendGamePacketToGroup(std::vector<GamePlayer*> players, GameUpdatePacket* pPacket, uint8* pExtraData)
+{
+    for (auto& pWorldPlayer : players)
+    {
+        if (pWorldPlayer)
+        {
             SendUDPPacketRaw(pWorldPlayer->GetNetID(), NET_MESSAGE_GAME_PACKET, pPacket, sizeof(GameUpdatePacket),
                              pExtraData);
         }
@@ -3847,6 +3992,49 @@ void World::UpdatePresenceNeededThings(bool sendUpdateToNetwork)
     if (sendUpdateToNetwork && !tiles.empty())
     {
         SendTileUpdateMultiple(tiles);
+    }
+}
+
+void World::RecalculateWorldVersionBounds()
+{
+    if (m_versionBuckets.empty())
+    {
+        m_minWorldVersionInWorld = 14;
+        m_maxWorldVersionInWorld = 14;
+        m_minGameVersionInWorld = 99.0f;
+        m_maxGameVersionInWorld = 99.0f;
+        return;
+    }
+
+    uint16 minWorld = 9999, maxWorld = 0;
+    float minGame = 999.0f, maxGame = 0.0f;
+    bool hasPlayers = false;
+
+    for (auto& [key, players] : m_versionBuckets)
+    {
+        if (players.empty())
+            continue;
+
+        hasPlayers = true;
+        minWorld = Min(minWorld, key.worldVersion);
+        maxWorld = Max(maxWorld, key.worldVersion);
+        minGame = Min(minGame, key.gameVersion);
+        maxGame = Max(maxGame, key.gameVersion);
+    }
+
+    if (hasPlayers)
+    {
+        m_minWorldVersionInWorld = minWorld;
+        m_maxWorldVersionInWorld = maxWorld;
+        m_minGameVersionInWorld = minGame;
+        m_maxGameVersionInWorld = maxGame;
+    }
+    else
+    {
+        m_minWorldVersionInWorld = 14;
+        m_maxWorldVersionInWorld = 14;
+        m_minGameVersionInWorld = 99.0f;
+        m_maxGameVersionInWorld = 99.0f;
     }
 }
 

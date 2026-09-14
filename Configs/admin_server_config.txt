@@ -1,8 +1,10 @@
 # if line starts with '#' it means its comment line
 
+enable_admin_server|1
+
 # Set LAN_IP or WAN_IP (Public IP) for VPS hosting.
-telnet_host|127.0.0.1|
-telnet_port|17999|
+admin_host|127.0.0.1|
+admin_port|17999|
 
 # 0 = Blocks connection if IP is not whitelisted in allow_ip
 # 1 = Password-Only Mode (Bypasses IP checking, relies ONLY on a password)
@@ -13,9 +15,12 @@ skip_ip_check|0
 # 0 = No Access  | 1 = Moderator | 2 = Admin | 3 = Developer | 4 = Root
 # -----------------------------------------------------------------
 
+# add_account|displayName|loginName|loginPass|rankID|
+# allow_ip|ip1|ip2|ip3|ip4|....|
+
 # EXAMPLES:
-# add_account|keichira|My_SuPerS3cr3t!Pass|4|
+# add_account|Keichira|keichira|My_SuPerS3cr3t!Pass|4|
 # allow_ip|192.168.1.3|192.168.1.8|
 
-# add_account|developer_node|DevPass123!|3|
-# allow_ip|127.0.0.1|
+add_account|Developer|developer_node|mypass123|4|
+allow_ip|127.0.0.1|

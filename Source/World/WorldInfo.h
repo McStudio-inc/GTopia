@@ -6,6 +6,11 @@
 #include "WorldObjectManager.h"
 #include "WorldTileManager.h"
 
+#define DEFAULT_WORLD_VERSION_FOR_DB 14
+
+static const std::vector<std::pair<float, uint16>> sWorldVersionMap = {
+    {4.11f, 23}, {3.68f, 20}, {3.02f, 14}, {2.995f, 13}, {2.88f, 4}, {1.30f, 3}, {0.0f, 0}};
+
 enum eWorldGenerationType
 {
     WORLD_GENERATION_DEFAULT = 0,
@@ -24,6 +29,7 @@ enum eWeatherTypes
 };
 
 bool IsValidWorldName(const string& worldName, bool allowColon = false);
+uint16 ChooseWorldVersionForClient(float gameVersion);
 
 class WorldInfo
 {
@@ -42,8 +48,9 @@ public:
 public:
     void Kill();
 
-    bool Serialize(MemoryBuffer& memBuffer, bool write, bool database, float gameVersion = 0.0f);
-    uint32 GetMemEstimate(bool database, float gameVersion = 0.0f);
+    bool Serialize(MemoryBuffer& memBuffer, bool write, bool database, int16 worldVersion = -1,
+                   float gameVersion = 0.0f);
+    uint32 GetMemEstimate(bool database, int16 worldVersion = -1, float gameVersion = 0.0f);
 
     void SetName(const string& worldName) { m_name = worldName; }
     const string& GetWorlName() const { return m_name; }

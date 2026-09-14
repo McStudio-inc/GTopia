@@ -3277,7 +3277,7 @@ void LockDialog::Handle(GamePlayer* pPlayer, ParsedTextPacket<38>& packet)
     if (pTileExtra->ownerID != pPlayer->GetUserID())
     {
         pTileExtra->RemoveFromList(pPlayer->GetUserID());
-        pWorld->SendTileUpdate(pTile, pPlayer);
+        pWorld->SendTileUpdate(pTile);
         pWorld->SendNameChangeToAll(pPlayer);
         pPlayer->PlaySFX("dialog_cancel.wav");
 

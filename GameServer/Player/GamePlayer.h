@@ -63,6 +63,7 @@ public:
     static void AccountCreationNameExistsCB(QueryTaskResult&& result);
     static void CreateAccountFinalCB(QueryTaskResult&& result);
 
+    uint16 GetWorldVersion() const { return m_worldVersion; }
     void SetTargetJoinWorld(const string& worldName, const string& doorID = "");
     void SendEnterDoorPacket(Vector2Float doorWorldPos);
     void HandleRenderWorld(int32 renderResult, TCPPacketReader& reader);
@@ -170,6 +171,7 @@ private:
     bool m_joiningWorld;
     uint32 m_currentWorldID;
     string m_targetJoinWorld;
+    uint16 m_worldVersion;
     Vector2Float m_worldPos;
     Vector2Float m_respawnPos;
 

@@ -19,6 +19,12 @@ void TCPEvent_Command(NetClient* pClient, TCPPacketHeader& header, TCPPacketRead
             TCPEvent_Command_SetRole(reader);
             break;
         }
+
+        case TCP_COMMAND_BROADCAST_MESSAGE:
+        {
+            TCPEvent_Command_BroadcastMessage(reader);
+            break;
+        }
     }
 }
 
@@ -46,4 +52,16 @@ void TCPEvent_Command_SetRole(TCPPacketReader& reader)
 
     pWorld->SendPlayerDataConfigToAll(pPlayer);
     pWorld->SendNameChangeToAll(pPlayer);
+}
+
+void TCPEvent_Command_BroadcastMessage(TCPPacketReader& reader)
+{
+    string message;
+    string worldName;
+    string audio;
+
+    if (!reader.ReadString(message) || !reader.ReadString(worldName) || !reader.ReadString(audio))
+        return;
+
+    GetPlayerManager()->BroadcastMessage(message, worldName, audio);
 }

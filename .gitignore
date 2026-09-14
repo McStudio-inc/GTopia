@@ -14,3 +14,5 @@ Build/*
 Runtime/*
 !Runtime/*.bat
 !Runtime/*.sh
+!Runtime/*.ps1
+!Runtime/admin_client_config.txt

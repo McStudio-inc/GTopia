@@ -19,13 +19,6 @@
 
 bool firstCallShutdown = false;
 
-#include <signal.h>
-void SignalStop(int32 signum)
-{
-    LOGGER_LOG_WARN("Received signal %d", signum);
-    GetContext()->Shutdown();
-}
-
 bool ReadArgs(int argc, char const* argv[])
 {
     bool idSet = false;
@@ -67,10 +60,7 @@ void EventThreadFunc()
 
 int main(int argc, char const* argv[])
 {
-    signal(SIGTERM, SignalStop);
-    signal(SIGINT, SignalStop);
-    signal(SIGSEGV, SignalStop);
-    signal(SIGABRT, SignalStop);
+    SystemSignal::RegisterShutdownHook(GetContext()->GetShutdownFlag());
 
     if (!ReadArgs(argc, argv))
         return 0;
@@ -185,5 +175,7 @@ int main(int argc, char const* argv[])
     GetDiscordWebhookManager()->Kill();
     GetLog()->Flush();
     GetLog()->Kill();
+
+    SystemSignal::SignalShutdownComplete();
     return 0;
 }

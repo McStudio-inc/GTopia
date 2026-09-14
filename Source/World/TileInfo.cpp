@@ -11,8 +11,23 @@ TileInfo::~TileInfo()
     SAFE_DELETE(m_pExtraData)
 }
 
-void TileInfo::Serialize(MemoryBuffer& memBuffer, bool write, bool database, uint16 worldVersion)
+void TileInfo::Serialize(MemoryBuffer& memBuffer, bool write, bool database, int16 worldVersion, float gameVersion)
 {
+    if (worldVersion == -1 && database)
+        worldVersion = DEFAULT_WORLD_VERSION_FOR_DB;
+
+    uint16 flags = m_tileData->flags;
+    bool hasExtraFlag = (flags & TILE_FLAG_HAS_EXTRA_DATA) != 0;
+
+    if (!database && write && hasExtraFlag && m_pExtraData != nullptr)
+    {
+        if (gameVersion > 0.0f && GetTileExtraMinGameVersion(m_pExtraData->type) > gameVersion)
+        {
+            hasExtraFlag = false;
+            flags &= ~TILE_FLAG_HAS_EXTRA_DATA;
+        }
+    }
+
     if (!database)
     {
         int16 fgID = ToItemClientID(m_tileData->fg);
@@ -21,21 +36,23 @@ void TileInfo::Serialize(MemoryBuffer& memBuffer, bool write, bool database, uin
         memBuffer.ReadWrite(fgID, write);
         memBuffer.ReadWrite(bgID, write);
         memBuffer.ReadWrite(m_tileData->parent, write);
-        memBuffer.ReadWrite(m_tileData->flags, write);
+        memBuffer.ReadWrite(flags, write);
     }
 
-    if (HasFlag(TILE_FLAG_HAS_PARENT))
+    if (flags & TILE_FLAG_HAS_PARENT)
     {
-        memBuffer.ReadWrite(m_tileData->parent, write); // ye its like that
+        memBuffer.ReadWrite(m_tileData->parent, write);
     }
 
-    if (HasFlag(TILE_FLAG_HAS_EXTRA_DATA))
+    bool shouldSerializeExtra = write ? (hasExtraFlag && m_pExtraData != nullptr) : hasExtraFlag;
+
+    if (shouldSerializeExtra)
     {
         if (write)
         {
             if (!m_pExtraData)
             {
-                LOGGER_LOG_ERROR("Tile flagged with extra data but extra data is NULL? fg:%d", m_tileData->fg);
+                LOGGER_LOG_ERROR("Tile flagged with extra data but pointer is NULL! fg:%d", m_tileData->fg);
                 return;
             }
 
@@ -45,15 +62,12 @@ void TileInfo::Serialize(MemoryBuffer& memBuffer, bool write, bool database, uin
         {
             ItemInfo* pItem = GetItemInfoManager()->GetItemByID(m_tileData->fg);
             if (!pItem)
-            {
                 return;
-            }
 
-            uint8 tileExtraType = GetTileExtraType(pItem->type);
+            uint8 tileExtraType = GetTileExtraTypeByItemType(pItem->type);
             if (tileExtraType != TILE_EXTRA_TYPE_NONE)
             {
                 m_pExtraData = CreateTileExtra(tileExtraType);
-
                 if (m_pExtraData)
                 {
                     m_pExtraData->Serialize(memBuffer, false, database, this, worldVersion);
@@ -65,17 +79,23 @@ void TileInfo::Serialize(MemoryBuffer& memBuffer, bool write, bool database, uin
     if (database && !write && m_tileData->fg != ITEM_ID_BLANK)
     {
         ItemInfo* pItem = GetItemInfoManager()->GetItemByID(m_tileData->fg);
-        if (!pItem)
-            return;
-
-        m_type = pItem->type;
+        if (pItem)
+        {
+            m_type = pItem->type;
+        }
     }
 }
 
-uint32 TileInfo::GetMemEstimate(bool database, uint16 worldVersion)
+uint32 TileInfo::GetMemEstimate(bool database, int16 worldVersion, float gameVersion)
 {
     MemoryBuffer memSize;
-    Serialize(memSize, true, database, worldVersion);
+
+    if (worldVersion == -1 && database)
+    {
+        worldVersion = 14;
+    }
+
+    Serialize(memSize, true, database, worldVersion, gameVersion);
 
     return memSize.GetOffset();
 }
@@ -83,9 +103,7 @@ uint32 TileInfo::GetMemEstimate(bool database, uint16 worldVersion)
 void TileInfo::SetFG(int16 itemID, WorldTileManager* pTileMgr)
 {
     if (!pTileMgr)
-    {
         return;
-    }
 
     ItemInfo* pItem = GetItemInfoManager()->GetItemByID(itemID);
     if (!pItem)
@@ -126,7 +144,7 @@ void TileInfo::SetFG(int16 itemID, WorldTileManager* pTileMgr)
         return;
     }
 
-    uint8 tileExtraType = GetTileExtraType(pItem->type);
+    uint8 tileExtraType = GetTileExtraTypeByItemType(pItem->type);
     if (tileExtraType != TILE_EXTRA_TYPE_NONE)
     {
         SetFlag(TILE_FLAG_HAS_EXTRA_DATA);

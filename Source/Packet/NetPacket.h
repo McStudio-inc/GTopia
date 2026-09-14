@@ -10,7 +10,8 @@ struct NetworkEvent
 {
     ENetEventType type = ENET_EVENT_TYPE_NONE;
     uint32 netID = 0;
-    PooledPacket* pPacket = nullptr;
+    ENetPacket* pENetPacket = nullptr; // to fix double allocations
+    PooledPacket* pPacket = nullptr;   // for incoming pooled packets
     uint32 host = 0;
 
     bool shouldDisconnect = false;
@@ -28,9 +29,10 @@ void SendCallFunctionPacket(uint32 senderNetID, const VariantVector& data, int32
 void SendCallFunctionPacket(uint32 senderNetID, uint8* pExtraData, uint32 extraSize, int32 netID = -1,
                             int32 delay = -1);
 
-bool SendENetPacketRaw(eMessagePacketType messageType, void* pData, uint32 dataSize, uint8* pExtraData,
+// do not use due thread safety
+/*bool SendENetPacketRaw(eMessagePacketType messageType, void* pData, uint32 dataSize, uint8* pExtraData,
                        ENetPeer* pPeer);
-bool SendENetPacket(eMessagePacketType messageType, const char* message, ENetPeer* pPeer);
+bool SendENetPacket(eMessagePacketType messageType, const char* message, ENetPeer* pPeer);*/
 
 const char* GetTextFromEnetPacket(uint8* pData, uint32 dataLength);
 uint32 GetMessageTypeFromEnetPacket(uint8* pData, uint32 dataLength);

@@ -11,6 +11,7 @@
 #include "World/WorldInfo.h"
 #include "WorldBossManager.h"
 #include "WorldNPCManager.h"
+#include <map>
 #include <queue>
 
 enum eWorldState
@@ -76,8 +77,8 @@ public:
     void SendClothUpdateToAll(GamePlayer* pPlayer);
     void SendParticleEffectToAll(float coordX, float coordY, uint32 particleType, float particleSize = 0,
                                  int32 delay = -1);
-    void SendTileUpdate(TileInfo* pTile, GamePlayer* pPlayer = nullptr);
-    void SendTileUpdate(uint16 tileX, uint16 tileY, GamePlayer* pPlayer = nullptr);
+    void SendTileUpdate(TileInfo* pTile);
+    void SendTileUpdate(uint16 tileX, uint16 tileY);
     void SendTileUpdateMultiple(const std::vector<TileInfo*>& tiles);
     void SendTileApplyDamage(TileInfo* pTile, int32 damage, int32 netID);
     void SendLockPacketToAll(int32 userID, int32 lockID, std::vector<TileInfo*>& tiles, TileInfo* pLockTile);
@@ -100,6 +101,8 @@ public:
     // void SendSteamPacketToAll(eSteamEvent eventType, int32 x, int32 y);
 
     void SendGamePacketToAll(GameUpdatePacket* pPacket, GamePlayer* pExceptMe = nullptr, uint8* pExtraData = nullptr);
+    void SendGamePacketToGroup(std::vector<GamePlayer*> players, GameUpdatePacket* pPacket,
+                               uint8* pExtraData = nullptr);
     void HandleTilePackets(GameUpdatePacket* pGamePacket);
     void DestroyTileAndSendToAll(TileInfo* pTile);
 
@@ -171,6 +174,8 @@ public:
     std::vector<uint32> GetActivePresenceUserIDs();
     void UpdatePresenceNeededThings(bool sendUpdatesToNetwork);
 
+    void RecalculateWorldVersionBounds();
+
     IPTracker& GetBannedPlayers() { return m_bannedPlayers; };
     SuckerBlockManager& GetSuckerBlockManager() { return m_suckerManager; }
 
@@ -189,6 +194,25 @@ private:
 
     eWorldState m_state;
     std::vector<GamePlayer*> m_players;
+
+    struct WorldClientVersionKey
+    {
+        uint16 worldVersion = 14;
+        float gameVersion = 0.0f;
+
+        bool operator<(const WorldClientVersionKey& other) const
+        {
+            if (worldVersion != other.worldVersion)
+                return worldVersion < other.worldVersion;
+            return gameVersion < other.gameVersion;
+        }
+    };
+    std::map<WorldClientVersionKey, std::vector<GamePlayer*>> m_versionBuckets;
+
+    uint16 m_minWorldVersionInWorld;
+    uint16 m_maxWorldVersionInWorld;
+    float m_minGameVersionInWorld;
+    float m_maxGameVersionInWorld;
 
     Timer m_worldOfflineTime;
     Timer m_worldLastSaveTime;

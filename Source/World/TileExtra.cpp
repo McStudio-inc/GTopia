@@ -2,7 +2,76 @@
 #include "Item/ItemInfo.h"
 #include "TileInfo.h"
 
-uint8 GetTileExtraType(uint8 itemType)
+const TileVersionBounds& GetTileVersionBounds(uint8 extraType)
+{
+    auto it = sTileVersionBounds.find(extraType);
+    if (it != sTileVersionBounds.end())
+        return it->second;
+
+    // empty
+    static const TileVersionBounds defaultBounds{0, 0, {}};
+    return defaultBounds;
+}
+
+uint16 GetTileEquivalenceVersion(uint8 extraType, uint16 playerVersion)
+{
+    auto& bounds = GetTileVersionBounds(extraType);
+
+    if (bounds.thresholds.empty())
+        return 14; // temp
+
+    if (playerVersion > bounds.maxThreshold)
+        return bounds.maxThreshold + 1;
+
+    if (playerVersion <= bounds.minThreshold)
+        return bounds.minThreshold;
+
+    for (uint16 thres : bounds.thresholds)
+    {
+        if (playerVersion <= thres)
+            return thres;
+    }
+
+    return bounds.maxThreshold + 1;
+}
+
+float GetTileExtraMinGameVersion(uint8 extraType)
+{
+    if (extraType >= 82)
+        return 3.68f;
+    if (extraType >= 77)
+        return 3.33f;
+    if (extraType >= 69)
+        return 2.88f;
+    if (extraType >= 60)
+        return 2.56f;
+    if (extraType >= 40)
+        return 2.27f;
+    if (extraType >= 16)
+        return 1.64f;
+    if (extraType >= 15)
+        return 1.56f;
+    if (extraType >= 14)
+        return 1.49f;
+    if (extraType >= 12)
+        return 1.48f;
+    if (extraType >= 11)
+        return 1.47f;
+    if (extraType >= 10)
+        return 1.44f;
+    if (extraType >= 9)
+        return 1.30f;
+    if (extraType >= 8)
+        return 1.24f;
+    if (extraType >= 7)
+        return 1.20f;
+    if (extraType >= 4)
+        return 0.92f;
+
+    return 0.92f;
+}
+
+uint8 GetTileExtraTypeByItemType(uint8 itemType)
 {
     switch (itemType)
     {
@@ -266,7 +335,7 @@ float TileExtraGrowth::GetGrowthPercent(TileInfo* pTile)
     return progress * 100.0f;
 }
 
-void TileExtra_Door::Serialize(MemoryBuffer& memBuffer, bool write, bool database, TileInfo* pTile, uint16 worldVersion)
+void TileExtra_Door::Serialize(MemoryBuffer& memBuffer, bool write, bool database, TileInfo* pTile, int16 worldVersion)
 {
     TileExtra::Serialize(memBuffer, write);
 
@@ -327,7 +396,7 @@ void TileExtra_Door::Serialize(MemoryBuffer& memBuffer, bool write, bool databas
     memBuffer.ReadWrite(flags, write);
 }
 
-void TileExtra_Sign::Serialize(MemoryBuffer& memBuffer, bool write, bool database, TileInfo* pTile, uint16 worldVersion)
+void TileExtra_Sign::Serialize(MemoryBuffer& memBuffer, bool write, bool database, TileInfo* pTile, int16 worldVersion)
 {
     TileExtra::Serialize(memBuffer, write);
 
@@ -352,7 +421,7 @@ void TileExtra_Sign::Serialize(MemoryBuffer& memBuffer, bool write, bool databas
     memBuffer.ReadWrite(unk, write);
 }
 
-void TileExtra_Lock::Serialize(MemoryBuffer& memBuffer, bool write, bool database, TileInfo* pTile, uint16 worldVersion)
+void TileExtra_Lock::Serialize(MemoryBuffer& memBuffer, bool write, bool database, TileInfo* pTile, int16 worldVersion)
 {
     TileExtra::Serialize(memBuffer, write);
     memBuffer.ReadWrite(flags, write);
@@ -382,7 +451,7 @@ void TileExtra_Lock::Serialize(MemoryBuffer& memBuffer, bool write, bool databas
     }
 }
 
-void TileExtra_Seed::Serialize(MemoryBuffer& memBuffer, bool write, bool database, TileInfo* pTile, uint16 worldVersion)
+void TileExtra_Seed::Serialize(MemoryBuffer& memBuffer, bool write, bool database, TileInfo* pTile, int16 worldVersion)
 {
     FinalizeGrowth(0);
 
@@ -392,14 +461,14 @@ void TileExtra_Seed::Serialize(MemoryBuffer& memBuffer, bool write, bool databas
 }
 
 void TileExtra_Component::Serialize(MemoryBuffer& memBuffer, bool write, bool database, TileInfo* pTile,
-                                    uint16 worldVersion)
+                                    int16 worldVersion)
 {
     TileExtra::Serialize(memBuffer, write);
     memBuffer.ReadWrite(randValue, write);
 }
 
 void TileExtra_Provider::Serialize(MemoryBuffer& memBuffer, bool write, bool database, TileInfo* pTile,
-                                   uint16 worldVersion)
+                                   int16 worldVersion)
 {
     FinalizeGrowth(0);
 
@@ -440,7 +509,7 @@ void TileExtra_Provider::Serialize(MemoryBuffer& memBuffer, bool write, bool dat
 }
 
 void TileExtra_Achievement::Serialize(MemoryBuffer& memBuffer, bool write, bool database, TileInfo* pTile,
-                                      uint16 worldVersion)
+                                      int16 worldVersion)
 {
     TileExtra::Serialize(memBuffer, write);
     memBuffer.ReadWrite(ownerID, write);
@@ -448,7 +517,7 @@ void TileExtra_Achievement::Serialize(MemoryBuffer& memBuffer, bool write, bool 
 }
 
 void TileExtra_HeartMonitor::Serialize(MemoryBuffer& memBuffer, bool write, bool database, TileInfo* pTile,
-                                       uint16 worldVersion)
+                                       int16 worldVersion)
 {
     TileExtra::Serialize(memBuffer, write);
     memBuffer.ReadWrite(ownerID, write);
@@ -456,7 +525,7 @@ void TileExtra_HeartMonitor::Serialize(MemoryBuffer& memBuffer, bool write, bool
 }
 
 void TileExtra_Xenonite::Serialize(MemoryBuffer& memBuffer, bool write, bool database, TileInfo* pTile,
-                                   uint16 worldVersion)
+                                   int16 worldVersion)
 {
     TileExtra::Serialize(memBuffer, write);
     memBuffer.ReadWrite(flags, write);
@@ -464,7 +533,7 @@ void TileExtra_Xenonite::Serialize(MemoryBuffer& memBuffer, bool write, bool dat
 }
 
 void TileExtra_OuijaBoard::Serialize(MemoryBuffer& memBuffer, bool write, bool database, TileInfo* pTile,
-                                     uint16 worldVersion)
+                                     int16 worldVersion)
 {
     TileExtra::Serialize(memBuffer, write);
     memBuffer.ReadWrite(playerCount, write);
@@ -486,7 +555,7 @@ void TileExtra_OuijaBoard::Serialize(MemoryBuffer& memBuffer, bool write, bool d
 }
 
 void TileExtra_FieldNode::Serialize(MemoryBuffer& memBuffer, bool write, bool database, TileInfo* pTile,
-                                    uint16 worldVersion)
+                                    int16 worldVersion)
 {
     TileExtra::Serialize(memBuffer, write);
     memBuffer.ReadWrite(expireTime, write);
@@ -506,7 +575,7 @@ void TileExtra_FieldNode::Serialize(MemoryBuffer& memBuffer, bool write, bool da
 }
 
 void TileExtra_BattleCage::Serialize(MemoryBuffer& memBuffer, bool write, bool database, TileInfo* pTile,
-                                     uint16 worldVersion)
+                                     int16 worldVersion)
 {
     TileExtra::Serialize(memBuffer, write);
     memBuffer.ReadWriteString(cageName, write);
@@ -530,7 +599,7 @@ void TileExtra_BattleCage::Serialize(MemoryBuffer& memBuffer, bool write, bool d
 }
 
 void TileExtra_PetTrainer::Serialize(MemoryBuffer& memBuffer, bool write, bool database, TileInfo* pTile,
-                                     uint16 worldVersion)
+                                     int16 worldVersion)
 {
     TileExtra::Serialize(memBuffer, write);
     memBuffer.ReadWriteString(trainerName, write);
@@ -557,7 +626,7 @@ void TileExtra_PetTrainer::Serialize(MemoryBuffer& memBuffer, bool write, bool d
 }
 
 void TileExtra_Mailbox::Serialize(MemoryBuffer& memBuffer, bool write, bool database, TileInfo* pTile,
-                                  uint16 worldVersion)
+                                  int16 worldVersion)
 {
     TileExtra::Serialize(memBuffer, write);
 
@@ -590,7 +659,7 @@ void TileExtra_Mailbox::Serialize(MemoryBuffer& memBuffer, bool write, bool data
 }
 
 void TileExtra_Crystal::Serialize(MemoryBuffer& memBuffer, bool write, bool database, TileInfo* pTile,
-                                  uint16 worldVersion)
+                                  int16 worldVersion)
 {
     TileExtra::Serialize(memBuffer, write);
     memBuffer.ReadWriteString(crystals, write);
@@ -602,7 +671,7 @@ void TileExtra_Crystal::Serialize(MemoryBuffer& memBuffer, bool write, bool data
 }
 
 void TileExtra_Bulletin::Serialize(MemoryBuffer& memBuffer, bool write, bool database, TileInfo* pTile,
-                                   uint16 worldVersion)
+                                   int16 worldVersion)
 {
     TileExtra::Serialize(memBuffer, write);
 
@@ -635,7 +704,7 @@ void TileExtra_Bulletin::Serialize(MemoryBuffer& memBuffer, bool write, bool dat
 }
 
 void TileExtra_DonaitonBox::Serialize(MemoryBuffer& memBuffer, bool write, bool database, TileInfo* pTile,
-                                      uint16 worldVersion)
+                                      int16 worldVersion)
 {
     TileExtra::Serialize(memBuffer, write);
 
@@ -672,7 +741,7 @@ void TileExtra_DonaitonBox::Serialize(MemoryBuffer& memBuffer, bool write, bool 
 }
 
 void TileExtra_WeatherSpecial::Serialize(MemoryBuffer& memBuffer, bool write, bool database, TileInfo* pTile,
-                                         uint16 worldVersion)
+                                         int16 worldVersion)
 {
     TileExtra::Serialize(memBuffer, write);
 
@@ -690,7 +759,7 @@ void TileExtra_WeatherSpecial::Serialize(MemoryBuffer& memBuffer, bool write, bo
 }
 
 void TileExtra_Mannequin::Serialize(MemoryBuffer& memBuffer, bool write, bool database, TileInfo* pTile,
-                                    uint16 worldVersion)
+                                    int16 worldVersion)
 {
     TileExtra::Serialize(memBuffer, write);
 
@@ -720,7 +789,7 @@ void TileExtra_Mannequin::Serialize(MemoryBuffer& memBuffer, bool write, bool da
     {
         memBuffer.ReadWriteRaw(&clientClothes, sizeof(int16) * 9, write);
 
-        if (NeedsCharFlags(worldVersion))
+        if (worldVersion > 3 && NeedsCharFlags(worldVersion))
         {
             memBuffer.ReadWrite(charFlags, write);
             memBuffer.ReadWrite(char2Flags, write);
@@ -729,14 +798,14 @@ void TileExtra_Mannequin::Serialize(MemoryBuffer& memBuffer, bool write, bool da
 }
 
 void TileExtra_MagicEgg::Serialize(MemoryBuffer& memBuffer, bool write, bool database, TileInfo* pTile,
-                                   uint16 worldVersion)
+                                   int16 worldVersion)
 {
     TileExtra::Serialize(memBuffer, write);
     memBuffer.ReadWrite(eggCount, write);
 }
 
 void TileExtra_Dressup::Serialize(MemoryBuffer& memBuffer, bool write, bool database, TileInfo* pTile,
-                                  uint16 worldVersion)
+                                  int16 worldVersion)
 {
     TileExtra::Serialize(memBuffer, write);
 
@@ -759,20 +828,20 @@ void TileExtra_Dressup::Serialize(MemoryBuffer& memBuffer, bool write, bool data
 }
 
 void TileExtra_Spotlight::Serialize(MemoryBuffer& memBuffer, bool write, bool database, TileInfo* pTile,
-                                    uint16 worldVersion)
+                                    int16 worldVersion)
 {
     TileExtra::Serialize(memBuffer, write);
 }
 
 void TileExtra_DisplayBlock::Serialize(MemoryBuffer& memBuffer, bool write, bool database, TileInfo* pTile,
-                                       uint16 worldVersion)
+                                       int16 worldVersion)
 {
     TileExtra::Serialize(memBuffer, write);
     memBuffer.ReadWrite(itemID, write);
 }
 
 void TileExtra_Sucker::Serialize(MemoryBuffer& memBuffer, bool write, bool database, TileInfo* pTile,
-                                 uint16 worldVersion)
+                                 int16 worldVersion)
 {
     TileExtra::Serialize(memBuffer, write);
 

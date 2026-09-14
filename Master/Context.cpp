@@ -1,8 +1,8 @@
 #include "Context.h"
 #include "Crash/CrashReport.h"
+#include "Server/AdminServer.h"
 #include "Server/GameServer.h"
 #include "Server/ServerManager.h"
-#include "Server/TelnetServer.h"
 
 Context::Context() : m_pDbPool(nullptr), m_pGameConfig(nullptr) {}
 
@@ -27,7 +27,7 @@ void Context::Kill()
 
     GetGameServer()->Kill();
     GetServerManager()->Kill();
-    GetTelnetServer()->Kill();
+    GetAdminServer()->Kill();
 
     SAFE_DELETE(m_pDbPool);
     SAFE_DELETE(m_pGameConfig);

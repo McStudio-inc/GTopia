@@ -229,65 +229,65 @@ void GameServer::Update()
         processedSends++;
 
         auto it = m_connectionMap.find(outEvent.netID);
-        if (it == m_connectionMap.end() || !it->second)
+        ENetPeer* pPeer = (it != m_connectionMap.end()) ? it->second : nullptr;
+
+        if (!pPeer)
         {
+            if (outEvent.pENetPacket)
+                enet_packet_destroy(outEvent.pENetPacket);
+
             if (outEvent.pPacket)
-            {
                 gPacketPool.Release(outEvent.pPacket);
-            }
             continue;
         }
 
         if (outEvent.shouldDisconnect)
         {
-            enet_peer_disconnect(it->second, 0);
+            enet_peer_disconnect(pPeer, 0);
             m_connectionMap.erase(it);
 
+            if (outEvent.pENetPacket)
+                enet_packet_destroy(outEvent.pENetPacket);
+
             if (outEvent.pPacket)
-            {
                 gPacketPool.Release(outEvent.pPacket);
-            }
             continue;
         }
 
-        if (!outEvent.pPacket)
-            continue;
-
-        ENetPacket* pEnetPacket = nullptr;
-
-        if (outEvent.isItemData)
+        if (outEvent.isItemData && outEvent.pPacket)
         {
             GameUpdatePacket* pGamePacket =
                 GetGamePacketFromEnetPacket(outEvent.pPacket->payload, outEvent.pPacket->dataLength, false);
-            if (!pGamePacket || pGamePacket->type != NET_GAME_PACKET_SEND_ITEM_DATABASE_DATA)
-                continue;
 
-            ItemsClientData* pClientData =
-                GetItemInfoManager()->GetClientData(pGamePacket->field_11, pGamePacket->field_10);
-            if (!pClientData || (pClientData && !pClientData->pItemData))
-                continue;
+            if (pGamePacket && pGamePacket->type == NET_GAME_PACKET_SEND_ITEM_DATABASE_DATA)
+            {
+                ItemsClientData* pClientData =
+                    GetItemInfoManager()->GetClientData(pGamePacket->field_11, pGamePacket->field_10);
 
-            pGamePacket->field_10 = 0;
-            pGamePacket->field_11 = 0;
+                if (pClientData && pClientData->pItemData)
+                {
+                    pGamePacket->field_10 = 0;
+                    pGamePacket->field_11 = 0;
 
-            pEnetPacket = enet_packet_create(nullptr, outEvent.pPacket->dataLength + pClientData->compressSize,
-                                             ENET_PACKET_FLAG_RELIABLE);
-            memcpy(pEnetPacket->data, outEvent.pPacket->payload, outEvent.pPacket->dataLength);
-            memcpy(pEnetPacket->data + outEvent.pPacket->dataLength - 1, pClientData->pItemData,
-                   pGamePacket->extraDataSize);
+                    ENetPacket* pItemPacket = enet_packet_create(
+                        nullptr, outEvent.pPacket->dataLength + pClientData->size, ENET_PACKET_FLAG_RELIABLE);
+                    memcpy(pItemPacket->data, outEvent.pPacket->payload, outEvent.pPacket->dataLength);
+                    memcpy(pItemPacket->data + outEvent.pPacket->dataLength - 1, pClientData->pItemData,
+                           pClientData->compressSize == 0 ? pClientData->size : pClientData->compressSize);
+
+                    enet_peer_send(pPeer, 0, pItemPacket);
+                }
+            }
+
+            gPacketPool.Release(outEvent.pPacket);
         }
-        else
+        else if (outEvent.pENetPacket)
         {
-            pEnetPacket =
-                enet_packet_create(outEvent.pPacket->payload, outEvent.pPacket->dataLength, ENET_PACKET_FLAG_RELIABLE);
+            if (enet_peer_send(pPeer, 0, outEvent.pENetPacket) != 0)
+            {
+                enet_packet_destroy(outEvent.pENetPacket);
+            }
         }
-
-        if (pEnetPacket)
-        {
-            enet_peer_send(it->second, 0, pEnetPacket);
-        }
-
-        gPacketPool.Release(outEvent.pPacket);
     }
 
     if (pContext->IsShutting())
@@ -341,8 +341,6 @@ void GameServer::Update()
                     continue;
                 }
 
-                // we can add more checks based on type
-
                 if (msgType == NET_MESSAGE_GAME_PACKET && packetLen > SMALL_PACKET_SIZE)
                 {
                     enet_packet_destroy(inEvent.packet);
@@ -368,7 +366,7 @@ void GameServer::Update()
 
                 enet_packet_destroy(inEvent.packet);
 
-                NetworkEvent netEvent{ENET_EVENT_TYPE_RECEIVE, (uint32)(uintptr_t)inEvent.peer->data, pPacket};
+                NetworkEvent netEvent{ENET_EVENT_TYPE_RECEIVE, (uint32)(uintptr_t)inEvent.peer->data, nullptr, pPacket};
                 m_networkQueue.enqueue(std::move(netEvent));
                 break;
             }
@@ -383,7 +381,7 @@ void GameServer::Update()
 
                 m_connectionMap.erase(netID);
 
-                NetworkEvent netEvent{ENET_EVENT_TYPE_DISCONNECT, netID, nullptr};
+                NetworkEvent netEvent{ENET_EVENT_TYPE_DISCONNECT, netID, nullptr, nullptr};
                 m_networkQueue.enqueue(std::move(netEvent));
                 break;
             }

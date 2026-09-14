@@ -20,7 +20,20 @@ bool IsValidWorldName(const string& worldName, bool allowColon)
     return true;
 }
 
-WorldInfo::WorldInfo() : m_version(14), m_flags(0), m_defaultWeather(0), m_currentWeather(0)
+uint16 ChooseWorldVersionForClient(float gameVersion)
+{
+    for (auto& [minVersion, worldVer] : sWorldVersionMap)
+    {
+        if (gameVersion >= minVersion)
+        {
+            return worldVer;
+        }
+    }
+
+    return 0;
+}
+
+WorldInfo::WorldInfo() : m_version(DEFAULT_WORLD_VERSION_FOR_DB), m_flags(0), m_defaultWeather(0), m_currentWeather(0)
 {
     m_pTileMgr = new WorldTileManager(this);
     m_pObjMgr = new WorldObjectManager();
@@ -43,13 +56,19 @@ void WorldInfo::Kill()
     SAFE_DELETE(m_pObjMgr);
 }
 
-bool WorldInfo::Serialize(MemoryBuffer& memBuffer, bool write, bool database, float gameVersion)
+// todo world version for importing rgt
+// database = false, write = false
+
+bool WorldInfo::Serialize(MemoryBuffer& memBuffer, bool write, bool database, int16 worldVersion, float gameVersion)
 {
-    memBuffer.ReadWrite(m_version, write);
+    if (database && worldVersion == -1)
+        worldVersion = m_version;
+
+    memBuffer.ReadWrite(worldVersion, write);
     memBuffer.ReadWrite(m_flags, write);
     memBuffer.ReadWriteString(m_name, write);
 
-    if (!m_pTileMgr->Serialize(memBuffer, write, database, this, gameVersion))
+    if (!m_pTileMgr->Serialize(memBuffer, write, database, this, worldVersion, gameVersion))
         return false;
 
     if (!database && write && gameVersion >= 5.40f) // 5.40 is not the actual value lazy to dig for it
@@ -97,13 +116,20 @@ void WorldInfo::GenerateWorld(eWorldGenerationType type)
     }
 }
 
-uint32 WorldInfo::GetMemEstimate(bool database, float gameVersion)
+uint32 WorldInfo::GetMemEstimate(bool database, int16 worldVersion, float gameVersion)
 {
+    if (database && worldVersion == -1)
+        worldVersion = m_version;
+
     uint32 memSize = 0;
     memSize += sizeof(uint16) + sizeof(m_flags) + 2 + m_name.size();
-    memSize += m_pTileMgr->GetMemEstimate(database, this, gameVersion);
+    memSize += m_pTileMgr->GetMemEstimate(database, this, worldVersion, gameVersion);
     memSize += m_pObjMgr->GetMemEstimate();
-    memSize += sizeof(m_defaultWeather) + sizeof(m_currentWeather) + sizeof(uint16) * 2 + sizeof(uint32);
+
+    if (worldVersion > 2)
+    {
+        memSize += sizeof(m_defaultWeather) + sizeof(m_currentWeather) + sizeof(uint16) * 2 + sizeof(uint32);
+    }
 
     if (!database && gameVersion > 5.40f)
     {

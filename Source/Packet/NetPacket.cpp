@@ -5,54 +5,43 @@ moodycamel::ConcurrentQueue<NetworkEvent> gPacketOutgoingQueue;
 
 void SendUDPPacketRaw(uint32 netID, eMessagePacketType msgType, void* pData, uint32 dataSize, uint8* pExtraData)
 {
-    if (msgType == NET_MESSAGE_GAME_PACKET && ((GameUpdatePacket*)pData)->HasFlag(GAME_PACKET_FLAG_EXTENDED_DATA))
+    if (!pData || dataSize == 0)
+        return;
+
+    uint32 extraSize = 0;
+    if (msgType == NET_MESSAGE_GAME_PACKET)
     {
-        if (!pExtraData)
-            return;
-
-        uint32 totalSize = dataSize + 5 + ((GameUpdatePacket*)pData)->extraDataSize;
-
-        PooledPacket* pPoolPacket = gPacketPool.Acquire(totalSize);
-        if (!pPoolPacket)
-            return;
-
-        NetworkEvent netEvent;
-        netEvent.netID = netID;
-        netEvent.pPacket = pPoolPacket;
-        netEvent.pPacket->dataLength = totalSize;
-
-        uint8* pCur = pPoolPacket->payload;
-
-        std::memcpy(pCur, &msgType, 4);
-        pCur += 4;
-        std::memcpy(pCur, pData, dataSize);
-        pCur += dataSize;
-        std::memcpy(pCur, pExtraData, ((GameUpdatePacket*)pData)->extraDataSize);
-
-        gPacketOutgoingQueue.enqueue(std::move(netEvent));
+        GameUpdatePacket* pGamePacket = (GameUpdatePacket*)(pData);
+        if (pGamePacket->flags & GAME_PACKET_FLAG_EXTENDED_DATA)
+        {
+            extraSize = pGamePacket->extraDataSize;
+        }
     }
-    else
+
+    if (extraSize > 0 && !pExtraData)
+        return;
+
+    ENetPacket* pPacket = enet_packet_create(nullptr, dataSize + 5 + extraSize, ENET_PACKET_FLAG_RELIABLE);
+    if (!pPacket)
+        return;
+
+    uint8* pCur = pPacket->data;
+    memcpy(pCur, &msgType, 4);
+    pCur += 4;
+    memcpy(pCur, pData, dataSize);
+    pCur += dataSize;
+
+    if (extraSize > 0)
     {
-        uint32 totalSize = dataSize + 5;
-
-        PooledPacket* pPoolPacket = gPacketPool.Acquire(totalSize);
-        if (!pPoolPacket)
-            return;
-
-        NetworkEvent netEvent;
-        netEvent.netID = netID;
-        netEvent.pPacket = pPoolPacket;
-        netEvent.pPacket->dataLength = totalSize;
-
-        uint8* pCur = pPoolPacket->payload;
-
-        std::memcpy(pCur, &msgType, 4);
-        pCur += 4;
-        std::memcpy(pCur, pData, dataSize);
-        pCur += dataSize;
-
-        gPacketOutgoingQueue.enqueue(std::move(netEvent));
+        memcpy(pCur, pExtraData, extraSize);
+        pCur += extraSize;
     }
+
+    NetworkEvent netEvent;
+    netEvent.netID = netID;
+    netEvent.pENetPacket = pPacket;
+
+    gPacketOutgoingQueue.enqueue(std::move(netEvent));
 }
 
 void SendUDPPacket(uint32 netID, eMessagePacketType messageType, const char* message, uint32 dataSize)
@@ -65,23 +54,20 @@ void SendUDPPacket(uint32 netID, eMessagePacketType messageType, const char* mes
         dataSize = strlen(message);
     }
 
-    uint32 totalSize = dataSize + 5;
-
-    PooledPacket* pPoolPacket = gPacketPool.Acquire(totalSize);
-    if (!pPoolPacket)
+    ENetPacket* pPacket = enet_packet_create(nullptr, dataSize + 5, ENET_PACKET_FLAG_RELIABLE);
+    if (!pPacket)
         return;
+
+    uint8* pCur = pPacket->data;
+    memcpy(pCur, &messageType, 4);
+    pCur += 4;
+    memcpy(pCur, message, dataSize);
+    pCur += dataSize;
 
     NetworkEvent netEvent;
     netEvent.netID = netID;
-    netEvent.pPacket = pPoolPacket;
-    netEvent.pPacket->dataLength = totalSize;
+    netEvent.pENetPacket = pPacket;
 
-    uint8* pCur = pPoolPacket->payload;
-
-    std::memcpy(pCur, &messageType, 4);
-    pCur += 4;
-    std::memcpy(pCur, message, dataSize);
-    pCur += dataSize;
     gPacketOutgoingQueue.enqueue(std::move(netEvent));
 }
 
@@ -99,6 +85,9 @@ void SendUDPItemDataPacket(uint32 netID, float gameVersion, uint32 platformType,
     if (!pGamePacket)
         return;
 
+    pGamePacket->field_10 = gameVersion;
+    pGamePacket->field_11 = platformType;
+
     uint32 totalSize = sizeof(GameUpdatePacket) + 5;
     PooledPacket* pPoolPacket = gPacketPool.Acquire(totalSize);
     if (!pPoolPacket)
@@ -108,13 +97,10 @@ void SendUDPItemDataPacket(uint32 netID, float gameVersion, uint32 platformType,
     uint8* pCur = pPoolPacket->payload;
     uint32 msgType = NET_MESSAGE_GAME_PACKET;
 
-    std::memcpy(pCur, &msgType, 4);
+    memcpy(pCur, &msgType, 4);
     pCur += 4;
-    std::memcpy(pCur, pGamePacket, sizeof(GameUpdatePacket));
+    memcpy(pCur, pGamePacket, sizeof(GameUpdatePacket));
     pCur += sizeof(GameUpdatePacket);
-
-    pGamePacket->field_10 = gameVersion;
-    pGamePacket->field_11 = platformType;
 
     NetworkEvent netEvent;
     netEvent.netID = netID;
@@ -130,13 +116,11 @@ void SendCallFunctionPacket(uint32 senderNetID, const VariantVector& data, int32
         return;
 
     uint32 extraSize = Proton::GetMemEstiamte(data);
-    uint32 totalSize = sizeof(GameUpdatePacket) + 5 + extraSize;
 
-    PooledPacket* pPoolPacket = gPacketPool.Acquire(totalSize);
-    if (!pPoolPacket)
+    ENetPacket* pPacket =
+        enet_packet_create(nullptr, sizeof(GameUpdatePacket) + 5 + extraSize, ENET_PACKET_FLAG_RELIABLE);
+    if (!pPacket)
         return;
-
-    pPoolPacket->dataLength = totalSize;
 
     GameUpdatePacket gamePacket;
     gamePacket.type = NET_GAME_PACKET_CALL_FUNCTION;
@@ -145,18 +129,21 @@ void SendCallFunctionPacket(uint32 senderNetID, const VariantVector& data, int32
     gamePacket.field_7 = delay;
     gamePacket.extraDataSize = extraSize;
 
-    uint8* pCur = pPoolPacket->payload;
+    uint8* pCur = pPacket->data;
     uint32 msgType = NET_MESSAGE_GAME_PACKET;
 
-    std::memcpy(pCur, &msgType, 4);
+    memcpy(pCur, &msgType, 4);
     pCur += 4;
-    std::memcpy(pCur, &gamePacket, sizeof(GameUpdatePacket));
+    memcpy(pCur, &gamePacket, sizeof(GameUpdatePacket));
     pCur += sizeof(GameUpdatePacket);
 
     uint32 writtenSize = 0;
     Proton::SerializeToMem(data, &writtenSize, pCur);
 
-    NetworkEvent netEvent{ENET_EVENT_TYPE_RECEIVE, senderNetID, pPoolPacket};
+    NetworkEvent netEvent;
+    netEvent.netID = senderNetID;
+    netEvent.pENetPacket = pPacket;
+
     gPacketOutgoingQueue.enqueue(std::move(netEvent));
 }
 
@@ -165,13 +152,10 @@ void SendCallFunctionPacket(uint32 senderNetID, uint8* pExtraData, uint32 extraS
     if (!pExtraData || extraSize == 0)
         return;
 
-    uint32 totalSize = sizeof(GameUpdatePacket) + 5 + extraSize;
-
-    PooledPacket* pPoolPacket = gPacketPool.Acquire(totalSize);
-    if (!pPoolPacket)
+    ENetPacket* pPacket =
+        enet_packet_create(nullptr, sizeof(GameUpdatePacket) + 5 + extraSize, ENET_PACKET_FLAG_RELIABLE);
+    if (!pPacket)
         return;
-
-    pPoolPacket->dataLength = totalSize;
 
     GameUpdatePacket gamePacket;
     gamePacket.type = NET_GAME_PACKET_CALL_FUNCTION;
@@ -180,20 +164,24 @@ void SendCallFunctionPacket(uint32 senderNetID, uint8* pExtraData, uint32 extraS
     gamePacket.field_7 = delay;
     gamePacket.extraDataSize = extraSize;
 
-    uint8* pCur = pPoolPacket->payload;
+    uint8* pCur = pPacket->data;
     uint32 msgType = NET_MESSAGE_GAME_PACKET;
 
-    std::memcpy(pCur, &msgType, 4);
+    memcpy(pCur, &msgType, 4);
     pCur += 4;
-    std::memcpy(pCur, &gamePacket, sizeof(GameUpdatePacket));
+    memcpy(pCur, &gamePacket, sizeof(GameUpdatePacket));
     pCur += sizeof(GameUpdatePacket);
-    std::memcpy(pCur, pExtraData, extraSize);
+    memcpy(pCur, pExtraData, extraSize);
 
-    NetworkEvent netEvent{ENET_EVENT_TYPE_RECEIVE, senderNetID, pPoolPacket};
+    NetworkEvent netEvent;
+    netEvent.netID = senderNetID;
+    netEvent.pENetPacket = pPacket;
+
     gPacketOutgoingQueue.enqueue(std::move(netEvent));
 }
 
-bool SendENetPacketRaw(eMessagePacketType messageType, void* pData, uint32 dataSize, uint8* pExtraData, ENetPeer* pPeer)
+/*bool SendENetPacketRaw(eMessagePacketType messageType, void* pData, uint32 dataSize, uint8* pExtraData, ENetPeer*
+pPeer)
 {
     if (!pPeer)
     {
@@ -229,7 +217,7 @@ bool SendENetPacketRaw(eMessagePacketType messageType, void* pData, uint32 dataS
     }
 
     return true;
-}
+}*/
 
 bool SendENetPacket(eMessagePacketType messageType, const char* message, ENetPeer* pPeer)
 {

@@ -161,15 +161,6 @@ bool GameConfig::LoadConfig(const string& filePath)
             continue;
         }
 
-        if (key == "enable_telnet_server")
-        {
-            if (!line.Require(1))
-                return false;
-
-            enableTelnetServer = line.GetUInt(1) == 1 ? true : false;
-            continue;
-        }
-
         /*if(key == "enable_world_balance")
         {
             if(!line.Require(1))

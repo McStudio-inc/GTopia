@@ -79,6 +79,12 @@ public:
     void SendWorldPresenceUpdateToAll(const std::vector<WorldPresenceUpdateElement>& elements);
     void SendWorldPresenceRemoveToAll(const std::vector<WorldPresenceRemoveElement>& elements);
 
+    void SendPacketToAll(TCPPacketWriter& packet);
+    void SendCommandBroadcastMessageToAll(const string& message, const string& worldName, const string& audio);
+
+    void ShutdownAllServers();
+    bool IsShutdownPending() const { return m_shutdownPending; }
+
 private:
     template <void (*Function)(NetClient*, TCPPacketHeader&, TCPPacketReader&)>
     void RegisterEvent(eTCPPacketType packet)
@@ -120,6 +126,9 @@ private:
 
     std::unordered_map<uint32, ServerInfo*> m_pendingClients;
     std::unordered_map<uint16, ServerInfo*> m_servers;
+
+    bool m_shutdownPending;
+    Timer m_shutdownTimer;
 
     EventDispatcher<uint16, NetClient*, TCPPacketHeader&, TCPPacketReader&> m_events;
 };

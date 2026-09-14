@@ -8,11 +8,13 @@
 
 #define MAX_SUPPORTED_ITEM_DATA_VERSION 26
 
-static const std::vector<std::pair<float, uint16>> sItemDataVersionMap = {
-    {5.47f, 26}, {5.46f, 25}, {5.11f, 21}, {4.71f, 19}, {4.53f, 17}, {4.44f, 16},
-    {4.19f, 15}, {3.74f, 14}, {3.62f, 13}, {3.45f, 12}, {2.988f, 11}};
+// {1.20f, 1}
 
-uint16 GetSupportedItemDataVersion(float gameVersion);
+static const std::vector<std::pair<float, uint16>> sItemDataVersionMap = {
+    {5.47f, 26}, {5.46f, 25}, {5.11f, 21}, {4.71f, 19},  {4.61f, 18}, {4.53f, 17}, {4.44f, 16}, {4.19f, 15},
+    {3.74f, 14}, {3.62f, 13}, {3.45f, 12}, {2.988f, 11}, {2.88f, 6},  {1.64f, 4},  {0.0f, 0}};
+
+uint16 ChooseItemDataVersionForClient(float gameVersion);
 uint16 GetMinRequiredItemDataVersion(float a, float b, float c, float d);
 uint16 GetMaxRequiredItemDataVersion(float a, float b, float c, float d);
 int32 GetBaseItemID(int32 itemID);
@@ -76,7 +78,7 @@ public:
     void Kill();
 
     void LoadFileHashes(const std::unordered_map<string, uint32>& hashData, bool forOgg);
-    void SaveToClientData(bool forOgg, uint16 minVersion, uint16 maxVersion);
+    void SaveToClientData(bool forOgg, uint16 minVersion, uint16 maxVersion, bool allSupportZLib, uint32& totalOutSize);
     void SetupItemExtras();
 
     inline ItemInfo* GetItemByID(int32 itemID) { return m_itemLookup[(uint16)(itemID + BASE_INDEX)]; }

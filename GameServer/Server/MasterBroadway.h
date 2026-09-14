@@ -40,6 +40,7 @@ public:
     void SendPlayerPresenceUnsubscribe(const std::vector<uint32>& ids);
     void SendWorldPresenceRemove(const std::vector<WorldPresenceRemoveElement>& removeElems);
     void SendWorldPresenceUpdate(const std::vector<WorldPresenceUpdateElement>& updateElems);
+    void SendCommandBroadcastMessage(const string& message, const string& worldName, const string& audio);
 
     bool IsConnected() { return m_pNetClient != nullptr; }
     bool Connect(const string& host, uint16 port, uint8 retryCount,

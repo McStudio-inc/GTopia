@@ -441,7 +441,7 @@ def edit_configuration_files(db: DatabaseConfig, local_ip: str, latest_cdn: str)
     
     update_config_line(RUNTIME_DIR / "servers.txt", "set_master|", f"set_master|{lan_ip}|{wan_ip}|\n")
     update_config_line(RUNTIME_DIR / "servers.txt", "add_server|", f"add_server|{lan_ip}|{wan_ip}|1|\n")
-    update_config_line(RUNTIME_DIR / "telnet_config.txt", "telnet_host|", f"telnet_host|{lan_ip}|\n")
+    update_config_line(RUNTIME_DIR / "admin_server_config.txt", "admin_host|", f"admin_host|{lan_ip}|\n")
     update_config_line(CERT_DIR / "main.go", "const SERVER_IP =", f'const SERVER_IP = "{wan_ip}"\n')
 
     print_success("Configuration done.")
@@ -485,7 +485,7 @@ def run_full_setup():
 
     print("\n--- Moving configs ---")
     config_files = [
-        "config.txt", "playmods.txt", "roles.txt", "telnet_config.txt", 
+        "config.txt", "playmods.txt", "roles.txt", "admin_server_config.txt", 
         "servers.txt", "achievements.txt", "store.txt", "consumable_data.txt", "battle_pet_data.txt"
     ]
     for config in config_files:

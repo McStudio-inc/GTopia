@@ -56,9 +56,17 @@ void GameMessage_RefreshItemData(GamePlayer* pPlayer, ParsedTextPacket<38>& pack
     GameUpdatePacket gamePacket;
     gamePacket.type = NET_GAME_PACKET_SEND_ITEM_DATABASE_DATA;
     gamePacket.field_4 = -1;
-    gamePacket.field_7 = clientData->size;
     gamePacket.flags |= GAME_PACKET_FLAG_EXTENDED_DATA;
-    gamePacket.extraDataSize = clientData->compressSize;
+
+    if (clientData->compressSize != 0)
+    {
+        gamePacket.field_7 = clientData->size;
+        gamePacket.extraDataSize = clientData->compressSize;
+    }
+    else
+    {
+        gamePacket.extraDataSize = clientData->size;
+    }
 
     SendUDPItemDataPacket(pPlayer->GetNetID(), loginDetail.platformType, loginDetail.gameVersion, &gamePacket);
 }

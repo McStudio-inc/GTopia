@@ -20,7 +20,7 @@
 GamePlayer::GamePlayer()
     : m_currentWorldID(0), m_joiningWorld(false), m_guestID(0), m_lastItemActivateTime(0), m_state(0), m_flags(0),
       m_gems(0), m_progressData(this), m_modController(this), m_activeBattlePetSlot(0), m_lockAccessTileIndex(-1),
-      m_lockAccessOwnerID(-1), m_tradeMgr(this), m_extraData(this)
+      m_lockAccessOwnerID(-1), m_tradeMgr(this), m_extraData(this), m_worldVersion(0)
 {
     RandomizeNextDBSaveTime();
 }
@@ -132,7 +132,7 @@ void GamePlayer::HandleCheckSession(TCPPacketReader& reader)
 void GamePlayer::TransferToGame()
 {
     string settings;
-    settings += "proto=144";
+    settings += "proto=" + ToString(m_loginDetail.protocol);
     settings += "|server_tick=" + ToString(Time::GetSystemTime());
     settings += "|choosemusic=audio/mp3/about_theme.mp3";
     settings += "|usingStoreNavigation=1";
@@ -150,6 +150,8 @@ void GamePlayer::TransferToGame()
     GameConfig* pGameConfig = GetContext()->GetGameConfig();
     RemoveState(PLAYER_STATE_LOGIN_REQUEST);
     SetState(PLAYER_STATE_ENTERING_GAME);
+
+    m_worldVersion = ChooseWorldVersionForClient(m_loginDetail.gameVersion);
 
     SendWelcomePacket(itemData->hash, pGameConfig->cdnServer, pGameConfig->cdnPath, settings, 0);
 }

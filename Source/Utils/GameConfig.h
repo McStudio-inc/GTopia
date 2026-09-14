@@ -96,8 +96,6 @@ public:
     float iosSupportedVersions[2];
     float macosSupportedVersions[2];
 
-    bool enableTelnetServer = false;
-
     bool isWorldBalancerEnabled = false;
     std::vector<WorldBalanceConfigSchema> balancedWorlds;
     float balanceSoftCapRatio = 0.6;

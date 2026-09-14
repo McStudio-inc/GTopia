@@ -6,6 +6,7 @@
 #include "IO/Log.h"
 #include "Utils/Timer.h"
 
+#include "../Event/TCP/TCPEvent_Command.h"
 #include "../Event/TCP/TCPEvent_Player.h"
 #include "../Event/TCP/TCPEvent_Server.h"
 #include "../Event/TCP/TCPEvent_World.h"
@@ -15,7 +16,7 @@ ServerInfo::ServerInfo(NetClient* pNetClient) : NetEntity(ENTITY_TYPE_SERVER)
     pClient = pNetClient;
 }
 
-ServerManager::ServerManager() {}
+ServerManager::ServerManager() : m_shutdownPending(false) {}
 
 ServerManager::~ServerManager()
 {
@@ -134,6 +135,7 @@ void ServerManager::RegisterEvents()
     RegisterEvent<TCPEvent_KillServer>(TCP_PACKET_KILL_SERVER);
     RegisterEvent<TCPEvent_HeartBeat>(TCP_PACKET_HEARTBEAT);
     RegisterEvent<TCPEvent_WorldPlayerSession>(TCP_PACKET_WORLD_PLAYER_SESSION);
+    RegisterEvent<TCPEvent_Command>(TCP_PACKET_COMMAND);
 }
 
 ServerInfo* ServerManager::GetServerByID(uint16 serverID)
@@ -312,6 +314,59 @@ void ServerManager::SendWorldPresenceRemoveToAll(const std::vector<WorldPresence
 {
     SendArrayToAll(TCP_PACKET_WORLD_REMOVE, elements);
 }
+
+void ServerManager::SendPacketToAll(TCPPacketWriter& packet)
+{
+    if (!m_pNetSocket)
+        return;
+
+    for (auto& [_, pServer] : m_servers)
+    {
+        if (!pServer || !pServer->pClient || pServer->serverType != CONFIG_SERVER_GAME)
+            continue;
+
+        pServer->pClient->Send(packet);
+    }
+}
+
+void ServerManager::SendCommandBroadcastMessageToAll(const string& message, const string& worldName,
+                                                     const string& audio)
+{
+    if (!m_pNetSocket)
+        return;
+
+    TCPPacketWriter writer(TCP_PACKET_COMMAND);
+    writer.Write<int32>(TCP_COMMAND_BROADCAST_MESSAGE);
+    writer.WriteString(message);
+    writer.WriteString(worldName);
+    writer.WriteString(audio);
+
+    SendPacketToAll(writer);
+}
+
+void ServerManager::ShutdownAllServers()
+{
+    if (m_shutdownPending)
+        return;
+
+    m_shutdownPending = true;
+    m_shutdownTimer.Reset();
+
+    for (auto& [serverID, pServer] : m_servers)
+    {
+        if (!pServer || !pServer->pClient)
+            continue;
+
+        TCPPacketWriter writer(TCP_PACKET_KILL_SERVER);
+        pServer->pClient->Send(writer);
+    }
+
+    if (m_servers.empty())
+    {
+        GetContext()->Shutdown();
+    }
+}
+
 bool ServerManager::AddServer(ServerInfo* pServer, uint16 serverID, int8 serverType)
 {
     if (!pServer || !pServer->pClient)
@@ -463,6 +518,15 @@ uint32 ServerManager::GetPlayerCount()
 
 void ServerManager::UpdateServers()
 {
+    if (m_shutdownPending)
+    {
+        if (m_servers.empty() || m_shutdownTimer.GetElapsedTime() >= 3000)
+        {
+            GetContext()->Shutdown();
+            return;
+        }
+    }
+
     if (m_lastServerUpdateTime.GetElapsedTime() < 1000)
         return;
 

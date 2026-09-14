@@ -170,8 +170,13 @@ void GameServer::Update()
         processedSends++;
 
         auto it = m_connectionMap.find(outEvent.netID);
-        if (it == m_connectionMap.end() || !it->second)
+        ENetPeer* pPeer = (it != m_connectionMap.end()) ? it->second : nullptr;
+
+        if (!pPeer)
         {
+            if (outEvent.pENetPacket)
+                enet_packet_destroy(outEvent.pENetPacket);
+
             if (outEvent.pPacket)
                 gPacketPool.Release(outEvent.pPacket);
             continue;
@@ -179,20 +184,26 @@ void GameServer::Update()
 
         if (outEvent.shouldDisconnect)
         {
-            enet_peer_disconnect(it->second, 0);
+            enet_peer_disconnect(pPeer, 0);
+            m_connectionMap.erase(it);
+
+            if (outEvent.pENetPacket)
+                enet_packet_destroy(outEvent.pENetPacket);
 
             if (outEvent.pPacket)
-            {
                 gPacketPool.Release(outEvent.pPacket);
-            }
             continue;
         }
 
-        if (outEvent.pPacket)
+        if (outEvent.pENetPacket)
         {
-            ENetPacket* pEnetPacket =
-                enet_packet_create(outEvent.pPacket->payload, outEvent.pPacket->dataLength, ENET_PACKET_FLAG_RELIABLE);
-            enet_peer_send(it->second, 0, pEnetPacket);
+            if (enet_peer_send(pPeer, 0, outEvent.pENetPacket) != 0)
+            {
+                enet_packet_destroy(outEvent.pENetPacket);
+            }
+        }
+        else if (outEvent.pPacket)
+        {
             gPacketPool.Release(outEvent.pPacket);
         }
     }
@@ -260,7 +271,7 @@ void GameServer::Update()
 
                 enet_packet_destroy(inEvent.packet);
 
-                NetworkEvent netEvent{ENET_EVENT_TYPE_RECEIVE, (uint32)(uintptr_t)inEvent.peer->data, pPacket};
+                NetworkEvent netEvent{ENET_EVENT_TYPE_RECEIVE, (uint32)(uintptr_t)inEvent.peer->data, nullptr, pPacket};
                 m_networkQueue.enqueue(std::move(netEvent));
                 break;
             }

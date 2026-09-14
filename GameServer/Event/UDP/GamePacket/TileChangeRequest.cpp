@@ -97,6 +97,8 @@ void TileChangeRequest::Execute(GamePlayer* pPlayer, World* pWorld, GameUpdatePa
     if (!pItem)
         return;
 
+    bool needToSendTileUpdate = false;
+
     if (pItem->id == ITEM_ID_FIST)
     {
         uint16 handItemID = inventory.GetClothByPart(BODY_PART_HAND);
@@ -726,6 +728,8 @@ void TileChangeRequest::Execute(GamePlayer* pPlayer, World* pWorld, GameUpdatePa
         {
             pTile->RemoveFlag(TILE_FLAG_PAINTED_WHITE);
         }
+
+        needToSendTileUpdate = true;
     }
     else
     {
@@ -942,6 +946,9 @@ void TileChangeRequest::Execute(GamePlayer* pPlayer, World* pWorld, GameUpdatePa
         float newTileHealthPercent = pTile->GetHealthPercent();
         if (newTileHealthPercent > 0.0f)
         {
+            pPacket->type = NET_GAME_PACKET_TILE_APPLY_DAMAGE;
+            pPacket->field_7 = punchDamage;
+
             if ((pTileItem->type == ITEM_TYPE_WEATHER_MACHINE || pTileItem->type == ITEM_TYPE_WEATHER_SPECIAL ||
                  pTileItem->type == ITEM_TYPE_WEATHER_SPECIAL2 ||
                  pTileItem->type == ITEM_TYPE_INFINITY_WEATHER_MACHINE) &&
@@ -1058,11 +1065,9 @@ void TileChangeRequest::Execute(GamePlayer* pPlayer, World* pWorld, GameUpdatePa
         }
     }
 
-    // todo here
-    if (pItem->id == ITEM_ID_FIST && pTile->GetHealthPercent() > 0.0f)
-    {
-        pWorld->SendTileApplyDamage(pTile, pPlayer->GetCharData().punchDamage, pPlayer->GetNetID());
-    }
+    pPacket->field_4 = pPlayer->GetNetID();
+    pWorld->SendGamePacketToAll(pPacket);
 
-    pWorld->SendTileUpdate(pTile);
+    if (needToSendTileUpdate)
+        pWorld->SendTileUpdate(pTile);
 }

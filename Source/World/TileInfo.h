@@ -46,8 +46,9 @@ public:
     ~TileInfo();
 
 public:
-    void Serialize(MemoryBuffer& memBuffer, bool write, bool database, uint16 worldVersion);
-    uint32 GetMemEstimate(bool database, uint16 worldVersion);
+    void Serialize(MemoryBuffer& memBuffer, bool write, bool database, int16 worldVersion = -1,
+                   float gameVersion = 0.0f);
+    uint32 GetMemEstimate(bool database, int16 worldVersion = -1, float gameVersion = 0.0f);
 
     void SetFG(int16 itemID, WorldTileManager* pTileMgr);
     void SetBG(int16 itemID, WorldTileManager* pTileMgr);
@@ -106,6 +107,14 @@ public:
         }
 
         return static_cast<T*>(m_pExtraData);
+    }
+
+    int32 GetTileExtraType()
+    {
+        if (!m_pExtraData)
+            return TILE_EXTRA_TYPE_NONE;
+
+        return m_pExtraData->type;
     }
 
     bool HasExtra() { return m_pExtraData != nullptr; }

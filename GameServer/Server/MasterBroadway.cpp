@@ -244,6 +244,20 @@ void MasterBroadway::SendWorldPresenceUpdate(const std::vector<WorldPresenceUpda
     SendArray(TCP_PACKET_WORLD_UPDATE, updateElems);
 }
 
+void MasterBroadway::SendCommandBroadcastMessage(const string& message, const string& worldName, const string& audio)
+{
+    if (!m_pNetClient)
+        return;
+
+    TCPPacketWriter writer(TCP_PACKET_COMMAND);
+    writer.Write<int32>(TCP_COMMAND_BROADCAST_MESSAGE);
+    writer.WriteString(message);
+    writer.WriteString(worldName);
+    writer.WriteString(audio);
+
+    m_pNetClient->Send(writer);
+}
+
 bool MasterBroadway::ConnectAndAuth(const string& host, uint16 port, uint8 maxConnectAttempts,
                                     const volatile sig_atomic_t* shutdownFlag)
 {

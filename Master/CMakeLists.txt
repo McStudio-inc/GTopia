@@ -41,6 +41,7 @@ set(MASTER_FILES PRIVATE
     ${MASTER_EVENT}/TCP/TCPEvent_Player.cpp
     ${MASTER_EVENT}/TCP/TCPEvent_Server.cpp
     ${MASTER_EVENT}/TCP/TCPEvent_World.cpp
+    ${MASTER_EVENT}/TCP/TCPEvent_Command.cpp
 
     ${SOURCE_WORLD}/WorldBalancer.cpp
     ${MASTER_WORLD}/WorldManager.cpp
@@ -56,7 +57,7 @@ set(MASTER_FILES PRIVATE
     ${SOURCE_SERVER}/ServerBroadwayBase.cpp
     ${MASTER_SERVER}/GameServer.cpp
     ${MASTER_SERVER}/ServerManager.cpp
-    ${MASTER_SERVER}/TelnetServer.cpp
+    ${MASTER_SERVER}/AdminServer.cpp
     ${MASTER_SERVER}/GamePresenceManager.cpp
 
     ${MASTER_COMMAND}/Commands.cpp

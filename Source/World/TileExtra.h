@@ -7,6 +7,13 @@
 #include "Utils/Timer.h"
 #include <deque>
 
+struct TileVersionBounds
+{
+    uint16 minThreshold = 0;
+    uint16 maxThreshold = 0;
+    std::vector<uint16> thresholds;
+};
+
 class TileExtra;
 class TileExtraGrowth;
 
@@ -23,7 +30,7 @@ protected:                               \
         bool write,                      \
         bool database,                   \
         TileInfo* pTile,                 \
-        uint16 worldVersion              \
+        int16 worldVersion              \
     ) override;                          \
 public:
 
@@ -38,7 +45,7 @@ protected:                               \
         bool write,                      \
         bool database,                   \
         TileInfo* pTile,                 \
-        uint16 worldVersion              \
+        int16 worldVersion              \
     ) override;                          \
 public:
 
@@ -160,7 +167,16 @@ enum eTileExtraFlags
     TILE_EXTRA_STUFF_INVERT = 1 << 1
 };
 
-uint8 GetTileExtraType(uint8 itemType);
+static const std::unordered_map<uint8, TileVersionBounds> sTileVersionBounds = {
+    {TILE_EXTRA_TYPE_LOCK, {11, 12, {11, 12}}},
+    {TILE_EXTRA_TYPE_MANNEQUIN, {0, 3, {0, 3}}}
+};
+
+const TileVersionBounds& GetTileVersionBounds(uint8 extraType);
+uint16 GetTileEquivalenceVersion(uint8 extraType, uint16 playerVersion);
+float GetTileExtraMinGameVersion(uint8 extraType);
+
+uint8 GetTileExtraTypeByItemType(uint8 itemType);
 TileExtra* CreateTileExtra(uint8 extraType);
 
 class TileInfo;
@@ -170,7 +186,7 @@ public:
     explicit TileExtra(uint8 tileExtraType) : type(tileExtraType) {}
     virtual ~TileExtra() {};
 
-    virtual void Serialize(MemoryBuffer& memBuffer, bool write, bool database, TileInfo* pTile, uint16 worldVersion) = 0;
+    virtual void Serialize(MemoryBuffer& memBuffer, bool write, bool database, TileInfo* pTile, int16 worldVersion) = 0;
     virtual float GetGrowthPercent(TileInfo* pTile) { return 0.0f; }
     virtual void FinalizeGrowth(uint32 ageMS) {}
     virtual void ModGrowth(int32 deltaAgeSec, int32 ageSec) {}
@@ -195,7 +211,7 @@ public:
     void FinalizeGrowth(uint32 ageMS) override;
     void ModGrowth(int32 deltaAgeSec, int32 ageSec) override;
     float GetGrowthPercent(TileInfo* pTile) override;
-    void Serialize(MemoryBuffer& memBuffer, bool write, bool database, TileInfo* pTile, uint16 worldVersion) override = 0;
+    void Serialize(MemoryBuffer& memBuffer, bool write, bool database, TileInfo* pTile, int16 worldVersion) override = 0;
 };
 
 TILE_EXTRA(TileExtra_Door, TILE_EXTRA_TYPE_DOOR)
@@ -502,7 +518,7 @@ TILE_EXTRA(TileExtra_Mannequin, TILE_EXTRA_TYPE_MANNEQUIN)
     }
 
 private:
-    bool NeedToSaveCharFlags(int16 itemID, uint16 worldVersion)
+    bool NeedToSaveCharFlags(int16 itemID, int16 worldVersion)
     {
         if(worldVersion < 4)
             return false;
@@ -513,7 +529,7 @@ private:
         return false;
     }
 
-    bool NeedsCharFlags(uint16 worldVersion)
+    bool NeedsCharFlags(int16 worldVersion)
     {
         for (int32 i = 0; i < 9; ++i)
         {

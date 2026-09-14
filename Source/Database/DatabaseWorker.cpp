@@ -3,6 +3,7 @@
 #include "../Utils/StringUtils.h"
 #include "../Utils/Timer.h"
 #include "DatabasePool.h"
+#include <chrono>
 
 DatabaseWorker::DatabaseWorker() : m_pDatabaseMgr(nullptr), m_pPrepParam(nullptr) {}
 
@@ -33,6 +34,11 @@ void DatabaseWorker::Kill()
     SAFE_DELETE(m_pPrepParam);
 }
 
+void DatabaseWorker::SendFakeTask()
+{
+    m_taskQueue.enqueue(QueryTaskRequest{});
+}
+
 void DatabaseWorker::Update()
 {
     if (!m_pDatabaseMgr)
@@ -57,113 +63,117 @@ void DatabaseWorker::Update()
     uint64 updateStartTime = Time::GetSystemTime();
     QueryTaskRequest taskReq;
 
-    while (m_taskQueue.try_dequeue(taskReq))
+    if (m_taskQueue.wait_dequeue_timed(taskReq, std::chrono::milliseconds(1000)))
     {
-        uint64 taskStartTime = Time::GetSystemTime();
-
-        QueryTaskResult taskRes;
-        taskRes.callback = taskReq.callback;
-        taskRes.queryID = taskReq.queryID;
-
-        if (taskReq.query.empty())
+        do
         {
-            MakeFailedTaskAndAdd(taskReq, std::move(taskRes), QUERY_STATUS_FAIL);
-            continue;
-        }
+            uint64 taskStartTime = Time::GetSystemTime();
 
-        if (taskStartTime - taskReq.reqTime >= QUERY_TIMEOUT_MS)
-        {
-            MakeFailedTaskAndAdd(taskReq, std::move(taskRes), QUERY_STATUS_TIMEOUT);
-            continue;
-        }
+            QueryTaskResult taskRes;
+            taskRes.callback = taskReq.callback;
+            taskRes.queryID = taskReq.queryID;
 
-        bool succeed = false;
-        if ((taskReq.flags & QUERY_FLAG_PREPARED))
-        {
-            if (taskReq.flags & QUERY_FLAG_BULK)
-            {
-                if (taskReq.data.size() < 2 || taskReq.data[0].GetINT() == 0)
-                {
-                    MakeFailedTaskAndAdd(taskReq, std::move(taskRes), QUERY_STATUS_FAIL);
-                    continue;
-                }
-
-                int32 paramsPerRow = taskReq.data[0].GetINT();
-                uint32 rowCount = ((taskReq.data.size() - 1) / paramsPerRow);
-
-                if (!m_pDatabaseMgr->PrepareBulkStmt(taskReq.query))
-                {
-                    MakeFailedTaskAndAdd(taskReq, std::move(taskRes), QUERY_STATUS_FAIL);
-                    continue;
-                }
-
-                if (!m_pDatabaseMgr->BeginTransaction())
-                {
-                    LOGGER_LOG_ERROR("Failed to start database transaction!");
-                    MakeFailedTaskAndAdd(taskReq, std::move(taskRes), QUERY_STATUS_FAIL);
-                    continue;
-                }
-                bool bulkSuccess = true;
-
-                for (uint32 i = 0; i < rowCount; ++i)
-                {
-                    uint32 offset = 1 + (i * paramsPerRow);
-                    SetupPreparedParams(taskReq.data, true, offset);
-
-                    if (!m_pDatabaseMgr->QueryBulk(m_pPrepParam->GetBinds().data()))
-                    {
-                        LOGGER_LOG_ERROR("Database bulk query failed at row index %d", i);
-                        bulkSuccess = false;
-                        break;
-                    }
-                }
-
-                if (bulkSuccess && m_pDatabaseMgr->Commit())
-                {
-                    taskRes.status = QUERY_STATUS_OK;
-                }
-                else
-                {
-                    m_pDatabaseMgr->Rollback();
-                    taskRes.status = QUERY_STATUS_FAIL;
-                }
-
-                m_pPrepParam->Reset();
-                m_pDbPool->AddResult(std::move(taskRes));
-                continue;
-            }
-            else
-            {
-                SetupPreparedParams(taskReq.data, false);
-                succeed = m_pDatabaseMgr->Query(taskReq.query, m_pPrepParam->GetBinds().data());
-            }
-            m_pPrepParam->Reset();
-        }
-        else
-        {
-            if (!BuildRawQueryParams(taskReq.query, taskReq.data))
+            if (taskReq.query.empty())
             {
                 MakeFailedTaskAndAdd(taskReq, std::move(taskRes), QUERY_STATUS_FAIL);
                 continue;
             }
 
-            succeed = m_pDatabaseMgr->Query(taskReq.query);
-        }
+            if (taskStartTime - taskReq.reqTime >= QUERY_TIMEOUT_MS)
+            {
+                MakeFailedTaskAndAdd(taskReq, std::move(taskRes), QUERY_STATUS_TIMEOUT);
+                continue;
+            }
 
-        if (succeed && (taskReq.flags & QUERY_FLAG_RETURN_RESULT))
-        {
-            taskRes.result = m_pDatabaseMgr->GetResults();
-        }
+            bool succeed = false;
+            if ((taskReq.flags & QUERY_FLAG_PREPARED))
+            {
+                if (taskReq.flags & QUERY_FLAG_BULK)
+                {
+                    if (taskReq.data.size() < 2 || taskReq.data[0].GetINT() == 0)
+                    {
+                        MakeFailedTaskAndAdd(taskReq, std::move(taskRes), QUERY_STATUS_FAIL);
+                        continue;
+                    }
 
-        if (succeed && (taskReq.flags & QUERY_FLAG_RETURN_INCREMENT))
-        {
-            taskRes.increment = m_pDatabaseMgr->GetLastInsertID();
-        }
+                    int32 paramsPerRow = taskReq.data[0].GetINT();
+                    uint32 rowCount = ((taskReq.data.size() - 1) / paramsPerRow);
 
-        taskRes.ownerID = taskReq.ownerID;
-        taskRes.extraData = std::move(taskReq.extraData);
-        taskRes.status = succeed ? QUERY_STATUS_OK : QUERY_STATUS_FAIL;
-        m_pDbPool->AddResult(std::move(taskRes));
+                    if (!m_pDatabaseMgr->PrepareBulkStmt(taskReq.query))
+                    {
+                        MakeFailedTaskAndAdd(taskReq, std::move(taskRes), QUERY_STATUS_FAIL);
+                        continue;
+                    }
+
+                    if (!m_pDatabaseMgr->BeginTransaction())
+                    {
+                        LOGGER_LOG_ERROR("Failed to start database transaction!");
+                        MakeFailedTaskAndAdd(taskReq, std::move(taskRes), QUERY_STATUS_FAIL);
+                        continue;
+                    }
+                    bool bulkSuccess = true;
+
+                    for (uint32 i = 0; i < rowCount; ++i)
+                    {
+                        uint32 offset = 1 + (i * paramsPerRow);
+                        SetupPreparedParams(taskReq.data, true, offset);
+
+                        if (!m_pDatabaseMgr->QueryBulk(m_pPrepParam->GetBinds().data()))
+                        {
+                            LOGGER_LOG_ERROR("Database bulk query failed at row index %d", i);
+                            bulkSuccess = false;
+                            break;
+                        }
+                    }
+
+                    if (bulkSuccess && m_pDatabaseMgr->Commit())
+                    {
+                        taskRes.status = QUERY_STATUS_OK;
+                    }
+                    else
+                    {
+                        m_pDatabaseMgr->Rollback();
+                        taskRes.status = QUERY_STATUS_FAIL;
+                    }
+
+                    m_pPrepParam->Reset();
+                    m_pDbPool->AddResult(std::move(taskRes));
+                    continue;
+                }
+                else
+                {
+                    SetupPreparedParams(taskReq.data, false);
+                    succeed = m_pDatabaseMgr->Query(taskReq.query, m_pPrepParam->GetBinds().data());
+                }
+                m_pPrepParam->Reset();
+            }
+            else
+            {
+                if (!BuildRawQueryParams(taskReq.query, taskReq.data))
+                {
+                    MakeFailedTaskAndAdd(taskReq, std::move(taskRes), QUERY_STATUS_FAIL);
+                    continue;
+                }
+
+                succeed = m_pDatabaseMgr->Query(taskReq.query);
+            }
+
+            if (succeed && (taskReq.flags & QUERY_FLAG_RETURN_RESULT))
+            {
+                taskRes.result = m_pDatabaseMgr->GetResults();
+            }
+
+            if (succeed && (taskReq.flags & QUERY_FLAG_RETURN_INCREMENT))
+            {
+                taskRes.increment = m_pDatabaseMgr->GetLastInsertID();
+            }
+
+            taskRes.ownerID = taskReq.ownerID;
+            taskRes.extraData = std::move(taskReq.extraData);
+            taskRes.status = succeed ? QUERY_STATUS_OK : QUERY_STATUS_FAIL;
+            m_pDbPool->AddResult(std::move(taskRes));
+
+        } while (m_taskQueue.try_dequeue(taskReq));
     }
 }
 
@@ -224,11 +234,11 @@ string DatabaseWorker::EscapeStringRawParams(const Variant& var)
     switch (var.GetType())
     {
         case VARIANT_TYPE_INT:
-            return m_pDatabaseMgr->EscapeString(ToString(var.GetINT()));
+            return ToString(var.GetINT());
         case VARIANT_TYPE_UINT:
-            return m_pDatabaseMgr->EscapeString(ToString(var.GetUINT()));
+            return ToString(var.GetUINT());
         case VARIANT_TYPE_FLOAT:
-            return m_pDatabaseMgr->EscapeString(ToString(var.GetFloat()));
+            return ToString(var.GetFloat());
         case VARIANT_TYPE_STRING:
             return "'" + m_pDatabaseMgr->EscapeString(var.GetString()) + "'";
 
@@ -240,15 +250,13 @@ string DatabaseWorker::EscapeStringRawParams(const Variant& var)
 bool DatabaseWorker::BuildRawQueryParams(string& query, const VariantVector& params)
 {
     if (CountCharacter(query, '?') != params.size())
-    {
         return false;
-    }
 
     uint32 lastPos = 0;
     uint32 paramIndex = 0;
 
     string res;
-    res.reserve(query.size() + 120);
+    res.reserve(query.size() + (params.size() * 32));
 
     for (uint32 i = 0; i < query.size(); ++i)
     {
@@ -258,9 +266,7 @@ bool DatabaseWorker::BuildRawQueryParams(string& query, const VariantVector& par
 
             string value = EscapeStringRawParams(params[paramIndex]);
             if (value.empty() && params[paramIndex].GetType() != VARIANT_TYPE_STRING)
-            {
                 return false;
-            }
 
             res.append(value);
             lastPos = i + 1;

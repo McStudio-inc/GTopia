@@ -102,7 +102,6 @@ bool DatabaseManager::Query(const string& query, MYSQL_BIND* pBind)
     }
 
     m_pLastStmt = pStmt;
-    // mysql_stmt_close(pStmt);
     return true;
 }
 
