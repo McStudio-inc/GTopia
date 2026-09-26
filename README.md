@@ -102,4 +102,5 @@ Once compiled, navigate to the `Runtime/` folder.
 ---
 
 <a href="https://github.com/McStudio-inc/GTopia">GTopia</a> Original Src by <a href="https://github.com/keichira">keichira</a>
-<a href="https://github.com/McStudio-inc/GTopia">GTopia</a> Original Src by <a href="https://github.com/McStudio-inc">McDev</a>
+
+<a href="https://github.com/McStudio-inc/GTopia">GTopia</a> Forked by <a href="https://github.com/McStudio-inc">McDev</a>
